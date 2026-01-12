@@ -1,0 +1,15 @@
+[submodule "docs-data"]
+	path = docs-data
+	url = https://github.com/ton-org/docs
+[submodule "tolk-contracts"]
+	path = tolk-contracts
+	url = https://github.com/ton-blockchain/tolk-bench
+[submodule "tree-sitter-tolk"]
+	path = tree-sitter-tolk
+	url = https://github.com/ton-blockchain/tree-sitter-tolk
+[submodule "ton-language-server"]
+	path = ton-language-server
+	url = https://github.com/ton-blockchain/ton-language-server
+[submodule "TEPs"]
+	path = TEPs
+	url = https://github.com/ton-blockchain/TEPs

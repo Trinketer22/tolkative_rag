@@ -1,0 +1,11 @@
+.ipynb_checkpoints
+.models
+.env
+__pycache__
+rag-data
+chroma-data
+indexes
+*.jsonl
+*.json
+*.log
+*.so
