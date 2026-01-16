@@ -64,10 +64,8 @@ Download and extract to rag-data
 ### Local env instalation
 
 ```shell
-pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e .
 
-# OR
-PIP_EXTRA_INDEX_URL="https://download.pytorch.org/whl/cpu" pip install -r requirements.txt
 ```
 
 #### Setup rag index
