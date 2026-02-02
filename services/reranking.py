@@ -1,4 +1,5 @@
 from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
+from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
 from typing import List, Sequence, Optional
 from concurrent.futures import ThreadPoolExecutor
@@ -32,6 +33,7 @@ class CrossEncoderRerankerWithScores(CrossEncoderReranker):
         self,
         documents: Sequence[Document],
         query: str,
+        callbacks: Optional[Callbacks] = None,
     ) -> Sequence[Document]:
         if len(documents) == 0:
             return []
@@ -57,6 +59,7 @@ class CrossEncoderRerankerWithScores(CrossEncoderReranker):
         self,
         documents: Sequence[Document],
         query: str,
+        callbacks: Optional[Callbacks] = None,
     ) -> Sequence[Document]:
         if len(documents) == 0:
             return []
