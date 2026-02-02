@@ -4,7 +4,7 @@ Loads from environment variables.
 """
 
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Optional, Tuple, Literal
 
 
@@ -233,9 +233,7 @@ When code examples provided in the context satisfy user request:
 - If you must reference code, use EXACT copy-paste
     """
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = (True,)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 
 settings = Settings()
