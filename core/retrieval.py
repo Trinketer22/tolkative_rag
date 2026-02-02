@@ -176,8 +176,8 @@ def traverse_knowledge_graph(
             ):
                 log.debug(f"Fetching child docs from {chunk.id}")
                 log.debug(f"Direct children {len(children_ids)}")
-                child_docs = traverse_knowledge_graph(
-                    vector_store.get_by_ids(children_ids),
+                child_docs = await traverse_knowledge_graph(
+                    await vector_store.get_by_ids(children_ids),
                     watch_set,
                     cur_depth + 1,
                     parent_score=child_score,
@@ -190,8 +190,8 @@ def traverse_knowledge_graph(
             ):
                 log.debug(f"Fetching referenced docs from {chunk.id}")
                 log.debug(f"{len(ref_ids)} references found")
-                ref_docs = traverse_knowledge_graph(
-                    vector_store.get_by_ids(ref_ids),
+                ref_docs = await traverse_knowledge_graph(
+                    await vector_store.get_by_ids(ref_ids),
                     watch_set,
                     cur_depth + 1,
                     parent_score=ref_score,

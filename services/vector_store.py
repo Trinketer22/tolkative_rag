@@ -147,7 +147,7 @@ class VectorStoreService:
         return added_ids
 
     # Wraps FAISS get_by_ids
-    def get_by_ids(
+    async def get_by_ids(
         self,
         ids: List[str],
     ) -> List[Document]:
