@@ -93,7 +93,11 @@ def add_to_hierarchy(docId: str, hierarchy: List[Document]):
 
 
 def process_md(
-    path: str, md_text: str, custom_title="", custom_crumbs=None, skip_top=False
+    path: str,
+    md_text: str,
+    custom_title: str = "",
+    custom_crumbs: Optional[List[str]] = None,
+    skip_top=False,
 ) -> Tuple[List[Document], Dict[str, Document]]:
     raw_md = unicodedata.normalize("NFKC", md_text)
     # raw_md  = md_path.read_text(encoding="utf8")
@@ -150,7 +154,9 @@ def process_md(
                     snippets=snippets,
                     crumbs=initial_crumbs + crumbs,
                 )
-                new_docs.append(new_doc)
+                assert new_doc.id
+                if title or new_doc.metadata["word_count"] > 0:
+                    new_docs.append(new_doc)
                 # docs.append(new_doc)
 
                 title = (
@@ -211,6 +217,7 @@ def process_md(
                         chapter_length += len(last_added_text) + int(chapter_length > 0)
                 else:
                     code_doc = process_code(code_text, lang, title, last_added_text)
+                    assert code_doc.id
                     snippets[code_doc.id] = code_doc
                     ref_snippets.append({"id": code_doc.id, "pos": chapter_length})
 
@@ -230,6 +237,7 @@ def process_md(
             snippets=snippets,
             crumbs=initial_crumbs + crumbs,
         )
+        assert new_doc.id
         add_to_hierarchy(new_doc.id, doc_hierarchy)
         new_docs.append(new_doc)
 

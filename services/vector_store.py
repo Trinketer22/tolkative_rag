@@ -24,33 +24,40 @@ class VectorStoreService:
         storage_path: str = settings.INDEX_PATH,
         headers_path: str = settings.HEADERS_INDEX_PATH,
         search_type: str = settings.SEARCH_TYPE,
+        storage: Optional[FAISS] = None,
+        header_storage: Optional[FAISS] = None,
     ):
-        self.storage: Optional[FAISS] = None
-        self.headers_storage: Optional[FAISS] = None
+        self.storage: Optional[FAISS] = storage
+        self.headers_storage: Optional[FAISS] = header_storage
         self.storage_path: str = storage_path
         self.headers_path: str = headers_path
         self._lock: RWLock = RWLock()
         self._search_type = search_type
         self._initialized = False
+        self._storage_updated = False
 
     def initialize(self):
         """Load indexes on startup."""
         if self._initialized:
             return
 
-        log.info("Loading documents index...")
-        self.storage = FAISS.load_local(
-            self.storage_path,
-            embedding_service.embedder,
-            allow_dangerous_deserialization=True,
-        )
+        if embedding_service.embedder is None:
+            raise RuntimeError("Embedder service is not initialized!")
+        if self.storage is None:
+            log.info("Loading documents index...")
+            self.storage = FAISS.load_local(
+                self.storage_path,
+                embedding_service.embedder,
+                allow_dangerous_deserialization=True,
+            )
 
-        log.info("Loading headersindex...")
-        self.headers_storage = FAISS.load_local(
-            self.headers_path,
-            embedding_service.embedder,
-            allow_dangerous_deserialization=True,
-        )
+        if self.headers_storage is None:
+            log.info("Loading headersindex...")
+            self.headers_storage = FAISS.load_local(
+                self.headers_path,
+                embedding_service.embedder,
+                allow_dangerous_deserialization=True,
+            )
 
         self._initialized = True
 
@@ -68,6 +75,8 @@ class VectorStoreService:
 
         search_fn: Callable
         search_storage = self.headers_storage if from_headers else self.storage
+        if search_storage is None:
+            raise RuntimeError("Storage is not initialized!")
         if query_vector is None:
             query_vector = await embedding_service.embed_query(query)
 
@@ -151,7 +160,7 @@ class VectorStoreService:
         self,
         ids: List[str],
     ) -> List[Document]:
-        if not self._initialized:
+        if not self._initialized or self.storage is None:
             raise RuntimeError("VectorStore not initialized")
 
         docs: List[Document] = []
