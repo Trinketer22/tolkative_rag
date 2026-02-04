@@ -1,10 +1,9 @@
-from typing import Tuple
-from numpy import exp
+from typing import List, Tuple
 import pytest
+import random
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
-from services.embedding import embedding_service
 from services.vector_store import VectorStoreService
 
 # ------------------------------------------------------------------
@@ -12,17 +11,9 @@ from services.vector_store import VectorStoreService
 # ------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def embedder() -> HuggingFaceEmbeddings:
-    embedding_service.initialize()
-    if embedding_service.embedder is None:
-        raise RuntimeError("Failed to initialize embedder")
-    return embedding_service.embedder
-
-
-@pytest.fixture(scope="function")
-def faiss_db(embedder: HuggingFaceEmbeddings) -> Tuple[FAISS, FAISS]:
-    documents = [
+@pytest.fixture()
+def default_documents() -> List[Document]:
+    return [
         Document(
             id="0",
             page_content="The quick brown fox jumps over the lazy dog.",
@@ -50,22 +41,27 @@ def faiss_db(embedder: HuggingFaceEmbeddings) -> Tuple[FAISS, FAISS]:
         ),
     ]
 
-    header_docs = [
-        Document(id=doc.id, page_content=" ".join(doc.page_content.split()[:4]))
-        for doc in documents
-    ]
 
-    # 3. Create and return the vector store
-    return FAISS.from_documents(documents, embedder), FAISS.from_documents(
-        header_docs, embedder
+@pytest.fixture(scope="function")
+def faiss_db(
+    embedder: HuggingFaceEmbeddings, faiss_factory, default_documents
+) -> Tuple[FAISS, FAISS]:
+    return faiss_factory(
+        embedder,
+        default_documents,
     )
 
 
 @pytest.fixture(scope="function")
-def vec_store(faiss_db: Tuple[FAISS, FAISS], tmp_path_factory) -> VectorStoreService:
-    # tmp_models = tmp_path_factory.mktemp("models")
-    tmp_index = tmp_path_factory.mktemp("main_index")
-    tmp_headers = tmp_path_factory.mktemp("headers_index")
+def storage_paths(tmp_path_factory) -> Tuple[str, str]:
+    return tmp_path_factory.mktemp("main_index"), tmp_path_factory.mktemp(
+        "headers_index"
+    )
+
+
+@pytest.fixture(scope="function")
+def vec_store(faiss_db: Tuple[FAISS, FAISS], storage_paths) -> VectorStoreService:
+    tmp_index, tmp_headers = storage_paths
 
     # monkeypatch.setattr(settings, "MODEL_CACHE_DIR", tmp_models)
     storage = VectorStoreService(
@@ -227,6 +223,16 @@ async def test_add_documents(vec_store: VectorStoreService):
         or doc.page_content == header_res[1].page_content
         for doc in relevant_docs
     )
+
+
+@pytest.mark.asyncio
+async def test_duplicate_id_document(vec_store: VectorStoreService, default_documents):
+    test_doc = random.choice(default_documents)
+    just_id = Document(id=test_doc.id, page_content="Totally different text")
+    for doc in [test_doc, just_id]:
+        with pytest.raises(RuntimeError) as exc_info:
+            await vec_store.add_documents([doc])
+            assert "duplicated" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
