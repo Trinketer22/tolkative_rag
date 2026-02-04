@@ -5,6 +5,7 @@ Provides interface for snippet storage
 from typing import List, Optional, Callable, Dict
 from config import settings
 from langchain_core.documents import Document
+from aiorwlock import RWLock
 
 # from langchain_community.retrievers import BM25Retriever
 from utils.json import load_json_dump
@@ -12,6 +13,12 @@ from utils.json import load_json_dump
 
 class MissingSnippetError(Exception):
     """Exception for missing snippets"""
+
+    pass
+
+
+class SnippetAlreadyExists(Exception):
+    """Exception for adding already existing snippers"""
 
     pass
 
@@ -28,10 +35,11 @@ class SnippetCacheService:
 
     def __init__(self):
         self.snippet_path = settings.SNIPPETS_PATH
-        self._snippets: Dict
+        self._snippets: Dict[str, Document]
+        self._lock = RWLock()
         self._initialized = False
 
-    def initialize(self):
+    def initialize(self, initial_data: Optional[List[Document]] = None):
         """
         Loading snippets
         Currently from json file
@@ -42,22 +50,29 @@ class SnippetCacheService:
             raise RuntimeError("SnippetCached is alread initialized!")
 
         self._snippets = {}
-        snip_list = load_json_dump(self.snippet_path, lambda doc: Document(**doc))
+        snip_list = (
+            load_json_dump(self.snippet_path, lambda doc: Document(**doc))
+            if initial_data is None
+            else initial_data
+        )
         # self.snippet_index = BM25Retriever.from_documents(snip_list,k = 10)
 
         for snip in snip_list:
+            assert snip.id
             self._snippets[snip.id] = snip
 
         self._initialized = True
 
-    async def get(self, id: str, required: bool = False) -> Optional[Document]:
+    async def get_total_snippets(self):
+        async with self._lock.reader_lock:
+            return len(self._snippets)
+
+    async def get(self, id: str) -> Optional[Document]:
         if not self._initialized:
             raise NotInitialized("Snippet storage is not initialized")
 
-        snip = self._snippets.get(id)
-
-        if required and snip is None:
-            raise MissingSnippetError(f"Snippet {id} is missing!")
+        async with self._lock.reader_lock:
+            snip = self._snippets.get(id)
 
         return snip
 
@@ -71,7 +86,10 @@ class SnippetCacheService:
         # return self.snippet_index.invoke(query)
 
     async def get_req(self, id: str) -> Document:
-        return await self.get(id, required=True)
+        snip = await self.get(id)
+        if not snip:
+            raise MissingSnippetError(f"Snippet {id} is missing!")
+        return snip
 
     async def mget(
         self,
@@ -83,12 +101,13 @@ class SnippetCacheService:
             raise NotInitialized("Snippet storage is not initialized")
         # In case of redis this would just wrap mget
         res_list = []
-        for doc_id in ids:
-            snip = self._snippets.get(doc_id)
+        async with self._lock.reader_lock:
+            for doc_id in ids:
+                snip = self._snippets.get(doc_id)
 
-            if required and snip is None:
-                raise MissingSnippetError(f"Snippet {id} is missing!")
-            res_list.append(snip)
+                if required and snip is None:
+                    raise MissingSnippetError(f"Snippet {id} is missing!")
+                res_list.append(snip)
 
         return res_list if filter is None else list(filter(filter_cb, res_list))
 
@@ -111,6 +130,22 @@ class SnippetCacheService:
                 docs_dict[doc.id] = doc
 
         return docs_dict
+
+    async def add_snippets(
+        self, snippets: Dict[str, Document], merge: bool = False
+    ) -> List[str]:
+        if len(snippets) == 0:
+            return []
+        async with self._lock.writer_lock:
+            if not merge:
+                intersections = list(self._snippets.keys() & snippets.keys())
+                if len(intersections) > 0:
+                    raise SnippetAlreadyExists(
+                        f"Snippets {','.join(intersections)} already exist!"
+                    )
+            self._snippets.update(snippets)
+
+        return list(snippets.keys())
 
     async def mget_dict_req(
         self, ids: List[str], filter_cb: Optional[Callable] = None
