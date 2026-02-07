@@ -236,6 +236,61 @@ async def test_duplicate_id_document(vec_store: VectorStoreService, default_docu
 
 
 @pytest.mark.asyncio
+async def test_get_by_ids(
+    vec_store: VectorStoreService, default_documents: List[Document]
+):
+    k_ids = 2
+    test_ids = [doc.id for doc in random.sample(default_documents, k=k_ids) if doc.id]
+    assert len(test_ids) == k_ids
+    found_docs = {}
+    for doc in default_documents:
+        if doc.id in test_ids:
+            found_docs[doc.id] = doc
+    assert len(found_docs) == k_ids
+
+    res_docs = await vec_store.get_by_ids(test_ids)
+    for doc in res_docs:
+        assert doc.id in found_docs
+        assert found_docs[doc.id].page_content == doc.page_content
+
+
+@pytest.mark.asyncio
+async def test_get_by_ids_skip_elements(
+    vec_store: VectorStoreService, default_documents: List[Document]
+):
+    k_ids = random.randint(1, len(default_documents))
+    test_ids = [doc.id for doc in random.sample(default_documents, k=k_ids) if doc.id]
+    assert len(test_ids) == k_ids
+
+    test_ids.insert(random.randint(0, k_ids - 1), "nonexistent_doc")
+    found_docs = {}
+    for doc in default_documents:
+        if doc.id in test_ids:
+            found_docs[doc.id] = doc
+    assert len(found_docs) == k_ids
+
+    res_docs = await vec_store.get_by_ids(test_ids)
+    assert len(res_docs) == k_ids
+    for doc in res_docs:
+        assert doc.id in found_docs
+        assert found_docs[doc.id].page_content == doc.page_content
+
+
+@pytest.mark.asyncio
+async def test_get_by_ids_required(
+    vec_store: VectorStoreService, default_documents: List[Document]
+):
+    random_ids = [doc.id for doc in random.sample(default_documents, k=2) if doc.id]
+    for test_payload in [
+        ["nonexistent_doc"],
+        ["nonexistent_doc", *random_ids],
+        [*random_ids, "nonexistent_doc"],
+    ]:
+        with pytest.raises(RuntimeError, match="Documents: nonexistent_doc"):
+            await vec_store.get_by_ids(test_payload, required=True)
+
+
+@pytest.mark.asyncio
 async def test_filter_lambda(vec_store: VectorStoreService):
     test_resp = await vec_store.search("Tell me about mars", top_k=3)
     assert any(doc for doc in test_resp if doc.metadata["topic"] == "food")
