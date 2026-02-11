@@ -2,13 +2,14 @@
 Provides interface for snippet storage
 """
 
-from typing import List, Optional, Callable, Dict
+import logging
+from typing import List, Optional, Callable, Awaitable, Dict
 from config import settings
 from langchain_core.documents import Document
 from aiorwlock import RWLock
 
 # from langchain_community.retrievers import BM25Retriever
-from utils.json import load_json_dump
+from utils.json import load_json_dump, save_json_dump
 
 
 class MissingSnippetError(Exception):
@@ -29,15 +30,19 @@ class NotInitialized(Exception):
     pass
 
 
+log = logging.getLogger(__name__)
+
+
 class SnippetCacheService:
     #    snippet_index: Optional[BM25Retriever] = None
     """Snippet storage"""
 
-    def __init__(self):
-        self.snippet_path = settings.SNIPPETS_PATH
+    def __init__(self, snippet_path: str = settings.SNIPPETS_PATH):
+        self.snippet_path = snippet_path
         self._snippets: Dict[str, Document]
         self._lock = RWLock()
         self._initialized = False
+        self._modified = False
 
     def initialize(self, initial_data: Optional[List[Document]] = None):
         """
@@ -114,7 +119,7 @@ class SnippetCacheService:
     async def mget_req(
         self, ids: List[str], filter_cb: Optional[Callable] = None
     ) -> List[Document]:
-        return await self.mget(ids, required=True)
+        return await self.mget(ids, filter_cb=filter_cb, required=True)
 
     async def mget_dict(
         self,
@@ -131,19 +136,91 @@ class SnippetCacheService:
 
         return docs_dict
 
-    async def add_snippets(
-        self, snippets: Dict[str, Document], merge: bool = False
+    async def update_snippets(
+        self,
+        snippets: Dict[str, Document],
+        callback: Optional[Callable[[Dict[str, str]], Awaitable[None]]] = None,
     ) -> List[str]:
+        if not self._initialized:
+            raise NotInitialized("Snippet storage is not initialized")
+
+        if len(snippets) == 0:
+            return []
+
+        updated_ids: List[str] = []
+        not_found = []
+        update_dict: Dict[str, Document] = {}
+        replace_dict: Dict[str, str] = {}
+        orig_dict: Dict[str, Document] = {}
+
+        async with self._lock.writer_lock:
+            for doc_id, doc in snippets.items():
+                if not doc.id:
+                    continue
+                if doc_id in self._snippets:
+                    updated_ids.append(doc_id)
+                    orig_dict[doc_id] = self._snippets[doc_id]
+                    # In that case, it's a replace operation
+                    if doc_id != doc.id:
+                        replace_dict[doc_id] = doc.id
+                        updated_ids.append(doc.id)
+                        del self._snippets[doc_id]
+                    update_dict[doc.id] = doc
+                else:
+                    not_found.append(doc_id)
+
+            if len(not_found) > 0:
+                raise ValueError(f"Snippets {','.join(not_found)} not found!")
+
+            self._snippets.update(update_dict)
+            try:
+                if callback is not None:
+                    await callback(replace_dict)
+                self._modified = True
+            except Exception as e:
+                # Roll back
+                for rep_id in replace_dict.values():
+                    # Clear replaced keys
+                    del self._snippets[rep_id]
+
+                # Update original keys
+                self._snippets.update(orig_dict)
+
+            return updated_ids
+
+    async def delete_snippets(self, snippet_ids: List[str]):
+        not_found: List[str] = []
+
+        if not self._initialized:
+            raise NotInitialized("Snippet storage is not initialized")
+
+        if len(snippet_ids) == 0:
+            return []
+
+        async with self._lock.writer_lock:
+            for doc_id in snippet_ids:
+                if doc_id not in self._snippets:
+                    not_found.append(doc_id)
+            if len(not_found) > 0:
+                raise ValueError(f"Snippets {','.join(not_found)} not found!")
+
+            for doc_id in snippet_ids:
+                del self._snippets[doc_id]
+
+        self._modified = True
+        return snippet_ids
+
+    async def add_snippets(self, snippets: Dict[str, Document]) -> List[str]:
         if len(snippets) == 0:
             return []
         async with self._lock.writer_lock:
-            if not merge:
-                intersections = list(self._snippets.keys() & snippets.keys())
-                if len(intersections) > 0:
-                    raise SnippetAlreadyExists(
-                        f"Snippets {','.join(intersections)} already exist!"
-                    )
+            intersections = list(self._snippets.keys() & snippets.keys())
+            if len(intersections) > 0:
+                raise SnippetAlreadyExists(
+                    f"Snippets {','.join(intersections)} already exist!"
+                )
             self._snippets.update(snippets)
+            self._modified = True
 
         return list(snippets.keys())
 
@@ -151,6 +228,11 @@ class SnippetCacheService:
         self, ids: List[str], filter_cb: Optional[Callable] = None
     ) -> Dict[str, Document]:
         return await self.mget_dict(ids, filter_cb, required=True)
+
+    async def cleanup(self):
+        if self._modified:
+            save_json_dump(self.snippet_path, self._snippets)
+        self._initialized = False
 
 
 #
