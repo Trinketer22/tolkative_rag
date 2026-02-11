@@ -1,4 +1,5 @@
-from typing import List, Tuple
+from pathlib import Path
+from typing import List, Tuple, Dict
 import pytest
 import random
 from langchain_community.vectorstores import FAISS
@@ -12,7 +13,43 @@ from services.vector_store import VectorStoreService
 
 
 @pytest.fixture()
-def default_documents() -> List[Document]:
+def hierarchial_documents() -> List[Document]:
+    return [
+        Document(
+            id="Earth orbit",
+            page_content="Top document about earth and it's satelites",
+            metadata={
+                "crumbs": "Space>>Earth orbit",
+                "children_nodes": [
+                    "Earth",
+                    "Moon",
+                ],
+                "topic": "space",
+            },
+        ),
+        Document(
+            id="Moon",
+            page_content="Something about moon",
+            metadata={
+                "references": ["Earth", "Solar system info"],
+                "crumbs": "Space>>Earth orbit>>Moon",
+                "topic": "space",
+            },
+        ),
+        Document(
+            id="Earth",
+            page_content="Earth stuff",
+            metadata={
+                "references": ["Moon", "Solar system info"],
+                "crumbs": "Space>>Earth orbit>>Earth",
+                "topic": "space",
+            },
+        ),
+    ]
+
+
+@pytest.fixture()
+def default_documents(hierarchial_documents) -> List[Document]:
     return [
         Document(
             id="0",
@@ -39,7 +76,7 @@ def default_documents() -> List[Document]:
             page_content="Python functions are defined using the def keyword.",
             metadata={"topic": "coding"},
         ),
-    ]
+    ] + hierarchial_documents
 
 
 @pytest.fixture(scope="function")
@@ -52,8 +89,8 @@ def faiss_db(
     )
 
 
-@pytest.fixture(scope="function")
-def storage_paths(tmp_path_factory) -> Tuple[str, str]:
+@pytest.fixture(scope="module")
+def storage_paths(tmp_path_factory) -> Tuple[Path, Path]:
     return tmp_path_factory.mktemp("main_index"), tmp_path_factory.mktemp(
         "headers_index"
     )
@@ -226,11 +263,239 @@ async def test_add_documents(vec_store: VectorStoreService):
 
 
 @pytest.mark.asyncio
+async def test_delete_document(
+    vec_store: VectorStoreService, default_documents: List[Document]
+):
+    del_candidates = [doc.id for doc in random.sample(default_documents, k=2) if doc.id]
+    assert len(del_candidates) == 2
+
+    assert len(await vec_store.get_by_ids(del_candidates)) == len(del_candidates)
+
+    await vec_store.delete_docs([del_candidates[0]])
+
+    assert len(await vec_store.get_by_ids(del_candidates)) == len(del_candidates) - 1
+
+    with pytest.raises(ValueError, match=f"Documents: {del_candidates[0]} not found"):
+        await vec_store.delete_docs(del_candidates)
+
+    await vec_store.delete_docs([del_candidates[1]])
+
+    assert len(await vec_store.get_by_ids(del_candidates)) == 0
+
+
+@pytest.mark.asyncio
+async def test_delete_hierarchial_document(
+    vec_store: VectorStoreService, hierarchial_documents: List[Document]
+):
+    top_doc = hierarchial_documents[0]
+    assert top_doc.id == "Earth orbit"
+    children_ids = top_doc.metadata["children_nodes"]
+    children_nodes = [
+        doc for doc in hierarchial_documents if doc.id and doc.id in children_ids
+    ]
+    assert len(children_nodes) == 2
+    assert all(len(doc.metadata["references"]) == 2 for doc in children_nodes)
+
+    delete_idx = random.randint(0, 1)
+    removed_doc = children_nodes[delete_idx]
+    untouched_doc = children_nodes[(delete_idx + 1) % 2]
+    assert removed_doc.id
+    # Make sure reference was there in the first place
+    assert removed_doc.id in untouched_doc.metadata["references"]
+
+    await vec_store.delete_docs([removed_doc.id])
+    assert untouched_doc.id
+
+    # Let's get the updated versions
+    after_update = await vec_store.get_by_ids(
+        [top_doc.id, untouched_doc.id, removed_doc.id]
+    )
+    assert len(after_update) == 2
+    top_after = after_update[0]
+    assert top_after.id == top_doc.id
+
+    untouched_after = after_update[1]
+    assert untouched_after.id == untouched_doc.id
+
+    updated_children = top_after.metadata["children_nodes"]
+
+    # Removed expected id from children of the top doc
+    # Other elements unchanged
+    assert len(updated_children) == len(children_ids) - 1
+    assert removed_doc.id not in updated_children
+    assert all(doc_id in children_ids for doc_id in updated_children)
+
+    # Same for references
+    updated_references = untouched_after.metadata["references"]
+    old_references = untouched_doc.metadata["references"]
+    assert len(updated_references) == len(old_references) - 1
+    assert removed_doc.id not in updated_references
+    assert all(ref in old_references for ref in updated_references)
+
+
+@pytest.mark.asyncio
+async def test_update_documents(
+    vec_store: VectorStoreService, default_documents: List[Document]
+):
+    picked_updates = random.sample(
+        default_documents, k=random.randint(1, len(default_documents))
+    )
+    picked_ids: List[str] = []
+    upd_dict: Dict[str, Document] = {}
+
+    for update_doc in picked_updates:
+        assert update_doc.id
+        picked_ids.append(update_doc.id)
+        new_meta = {**update_doc.metadata}
+        assert "test_attribute" not in new_meta
+        new_meta["test_attribute"] = (
+            f"Test value {update_doc.id}:{random.randint(0, 1337)}"
+        )
+        new_doc = Document(
+            id=update_doc.id, page_content=update_doc.page_content, metadata=new_meta
+        )
+        upd_dict[update_doc.id] = new_doc
+
+    new_ids = await vec_store.update_documents(upd_dict)
+    assert len(new_ids) == len(picked_updates)
+
+    after_update = await vec_store.get_by_ids(picked_ids)
+    for doc in after_update:
+        assert doc.id
+        assert (
+            doc.metadata["test_attribute"]
+            == upd_dict[doc.id].metadata["test_attribute"]
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_documents_new_id(
+    vec_store: VectorStoreService, hierarchial_documents: List[Document]
+):
+    # Update everything except the top document
+    target_docs = hierarchial_documents[1:]
+    all_ids = [doc.id for doc in hierarchial_documents if doc.id]
+    target_ids = all_ids[1:]
+    updated_docs = [
+        Document(
+            id=f"{doc.id} updated", page_content=doc.page_content, metadata=doc.metadata
+        )
+        for doc in target_docs
+        if doc.id
+    ]
+    assert len(target_docs) == len(updated_docs)
+    upd_dict: Dict[str, Document] = {}
+
+    for orig_doc, new_doc in zip(target_docs, updated_docs):
+        assert orig_doc.id and new_doc.id
+        upd_dict[orig_doc.id] = new_doc
+
+    new_ids = await vec_store.update_documents(upd_dict)
+    # Except that all documents will be updated, because
+    # Child ids are impacted -> top document should be updated too
+    assert len(new_ids) == len(hierarchial_documents)
+
+    after_update = await vec_store.get_by_ids(all_ids)
+    assert len(after_update) == len(hierarchial_documents)
+
+    def check_id_update(orig_ids: List[str], updated_ids: List[str]):
+        assert len(updated_ids) == len(orig_ids)
+        for orig_id, upd_id in zip(orig_ids, updated_ids):
+            if orig_id in target_ids:
+                assert upd_id == f"{orig_id} updated"
+            else:
+                assert upd_id == orig_id
+
+    for orig_doc, updated_doc in zip(hierarchial_documents, after_update):
+        children = orig_doc.metadata.get("children_nodes", [])
+        refs = orig_doc.metadata.get("references", [])
+        if len(children) > 0:
+            updated_children = updated_doc.metadata.get("children_nodes", [])
+            check_id_update(children, updated_children)
+        if len(refs) > 0:
+            updated_refs = updated_doc.metadata.get("references", [])
+            check_id_update(refs, updated_refs)
+
+
+@pytest.mark.asyncio
+async def test_update_callback(
+    vec_store: VectorStoreService, default_documents: List[Document]
+):
+    pick_doc = random.choice(default_documents)
+    assert pick_doc.id
+    new_doc = Document(
+        id=pick_doc.id, page_content="New page content", metadata=pick_doc.metadata
+    )
+    assert new_doc.page_content != pick_doc.page_content
+
+    test_counter = 0
+
+    async def update_counter():
+        nonlocal test_counter
+        test_counter += 1
+
+    await vec_store.update_documents({pick_doc.id: new_doc}, callback=update_counter)
+    after_update = await vec_store.get_by_ids([pick_doc.id], required=True)
+    assert after_update[0].page_content == new_doc.page_content
+    assert test_counter == 1
+
+
+@pytest.mark.asyncio
+async def test_update_revert_on_failed_callback(
+    vec_store: VectorStoreService, default_documents: List[Document]
+):
+    pick_doc = random.choice(default_documents)
+    assert pick_doc.id
+    new_doc = Document(
+        id=pick_doc.id, page_content="New page content", metadata=pick_doc.metadata
+    )
+    assert new_doc.page_content != pick_doc.page_content
+
+    async def failed_cb():
+        raise RuntimeError("Something went wrong!")
+
+    new_ids = await vec_store.update_documents(
+        {pick_doc.id: new_doc}, callback=failed_cb
+    )
+    assert len(new_ids) == 0
+
+    after_rollback = await vec_store.get_by_ids([pick_doc.id])
+    assert after_rollback[0].page_content == pick_doc.page_content
+
+
+@pytest.mark.asyncio
+async def test_clean_up(
+    vec_store: VectorStoreService, storage_paths: Tuple[Path, Path]
+):
+    neptune = Document(
+        id="neptune",
+        page_content="The Neptune is known as the Blue Planet.",
+        metadata={"topic": "space", "crumbs": "Space>>Planets>>Neptune"},
+    )
+    plutone = Document(
+        id="plutone",
+        page_content="Pluto is not actually considered planet, but a Kuiper belt object.",
+        metadata={"topic": "space", "crumbs": "Space>>Planets>>Pluto"},
+    )
+
+    await vec_store.add_documents([neptune, plutone])
+
+    # Storage directories should be empty
+    assert not any(storage_paths[0].iterdir())
+    assert not any(storage_paths[1].iterdir())
+
+    await vec_store.cleanup()
+
+    assert any(storage_paths[0].iterdir())
+    assert any(storage_paths[1].iterdir())
+
+
+@pytest.mark.asyncio
 async def test_duplicate_id_document(vec_store: VectorStoreService, default_documents):
     test_doc = random.choice(default_documents)
     just_id = Document(id=test_doc.id, page_content="Totally different text")
     for doc in [test_doc, just_id]:
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(ValueError) as exc_info:
             await vec_store.add_documents([doc])
             assert "duplicated" in str(exc_info.value)
 
@@ -286,7 +551,7 @@ async def test_get_by_ids_required(
         ["nonexistent_doc", *random_ids],
         [*random_ids, "nonexistent_doc"],
     ]:
-        with pytest.raises(RuntimeError, match="Documents: nonexistent_doc"):
+        with pytest.raises(ValueError, match="Documents: nonexistent_doc not found"):
             await vec_store.get_by_ids(test_payload, required=True)
 
 
