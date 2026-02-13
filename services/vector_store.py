@@ -35,6 +35,7 @@ class VectorStoreService:
         self._search_type = search_type
         self._initialized = False
         self._storage_updated = False
+        self._document_files: Optional[Dict[str, List[str]]] = None
 
     def initialize(self):
         """Load indexes on startup."""
@@ -140,6 +141,8 @@ class VectorStoreService:
 
         storage = self.storage
         added_ids = await execute_async(lambda: storage.add_documents(documents))
+        # Clear the map for simplicity sake
+        self._document_files = None
         # Once in a storage lifespan update the flag
         if not self._storage_updated:
             self._storage_updated = len(added_ids) > 0
@@ -184,6 +187,8 @@ class VectorStoreService:
             raise RuntimeError("VectorStore not initialized")
 
         storage = self.headers_storage if from_headers else self.storage
+        # Kinda dilema, maybe we should release the lock every time, but
+        # currently it is only used in sequential manner
         async with self._lock.reader_lock:
             for doc_id in storage.index_to_docstore_id.values():
                 docs = storage.get_by_ids([doc_id])
@@ -196,6 +201,38 @@ class VectorStoreService:
             if callback(doc):
                 found.append(doc)
         return found
+
+    async def get_documents_from_file(self, file_path: str) -> List[Document]:
+        found_docs: List[Document] = []
+        if not file_path:
+            return found_docs
+
+        doc_map = await self.get_all_files()
+        doc_ids = doc_map.get(file_path, [])
+
+        if len(doc_ids) > 0:
+            found_docs = await self.get_by_ids(doc_ids)
+        return found_docs
+
+    async def get_all_files(self) -> Dict[str, List[str]]:
+        if self._document_files is not None:
+            return self._document_files
+
+        doc_map: Dict[str, List[str]] = {}
+        async for doc in self._iterate_documents():
+            source_path = doc.metadata.get("from")
+            if not doc.id or not source_path:
+                continue
+
+            doc_set = doc_map.get(source_path, [])
+
+            # Suboptimal for now
+            if doc.id not in doc_set:
+                doc_set.append(doc.id)
+                doc_map[source_path] = list(doc_set)
+
+        self._document_files = doc_map
+        return self._document_files
 
     async def get_document_references(self, ids: List[str]) -> List[Document]:
         references: List[Document] = []
@@ -240,6 +277,8 @@ class VectorStoreService:
             )
             headers_storage.delete(ids)
             self._storage_updated = True
+            # Bit wasetful, but for simplicity sake i think it's ok
+            self._document_files = None
 
         if update_refs:
             id_set = set(ids)
@@ -306,11 +345,11 @@ class VectorStoreService:
             self.storage.delete(old_docs)
             self.headers_storage.delete(old_docs)
             new_ids = await self._add_docs_internal(new_docs)
-            print(f"New ids: {new_ids}")
             try:
                 if callback is not None:
                     await callback()
                 self._storage_updated = True
+                self._document_files = None
             except Exception:
                 self.storage.delete(new_ids)
                 with_crumbs = [

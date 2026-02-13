@@ -25,6 +25,7 @@ def hierarchial_documents() -> List[Document]:
                     "Moon",
                 ],
                 "topic": "space",
+                "from": "space.md",
             },
         ),
         Document(
@@ -34,6 +35,7 @@ def hierarchial_documents() -> List[Document]:
                 "references": ["Earth", "Solar system info"],
                 "crumbs": "Space>>Earth orbit>>Moon",
                 "topic": "space",
+                "from": "space.md",
             },
         ),
         Document(
@@ -43,6 +45,7 @@ def hierarchial_documents() -> List[Document]:
                 "references": ["Moon", "Solar system info"],
                 "crumbs": "Space>>Earth orbit>>Earth",
                 "topic": "space",
+                "from": "space.md",
             },
         ),
     ]
@@ -566,6 +569,70 @@ async def test_filter_lambda(vec_store: VectorStoreService):
     )
 
     assert not any(doc for doc in test_resp if doc.metadata["topic"] == "food")
+
+
+@pytest.mark.asyncio
+async def test_get_files_list(vec_store: VectorStoreService):
+    files = await vec_store.get_all_files()
+    assert len(files) == 1
+    assert list(files.keys())[0] == "space.md"
+
+    new_docs = [
+        Document(
+            id="Other file",
+            page_content="Some other content",
+            metadata={"from": "other_file.md", "crumbs": "Some>>Other>>Data"},
+        ),
+        Document(
+            id=f"Other file {random.randint(1, 1337)}",
+            page_content="Some other content",
+            metadata={"from": "other_file.md", "crumbs": "Some>>Other>>Data"},
+        ),
+    ]
+
+    await vec_store.add_documents(new_docs)
+
+    files = await vec_store.get_all_files()
+
+    assert len(files) == 2
+    other_ids = files["other_file.md"]
+
+    assert len(other_ids) == len(new_docs)
+    for doc in new_docs:
+        assert doc.id and doc.id in other_ids
+
+
+@pytest.mark.asyncio
+async def test_get_by_file_name(
+    vec_store: VectorStoreService, hierarchial_documents: List[Document]
+):
+    found_files = await vec_store.get_documents_from_file("space.md")
+    for doc_orig, doc_found in zip(hierarchial_documents, found_files):
+        assert doc_orig.id and doc_found.id
+        assert doc_orig.id == doc_found.id
+        assert doc_orig.page_content == doc_found.page_content
+
+    new_docs = [
+        Document(
+            id="Other file",
+            page_content="Some other content",
+            metadata={"from": "other_file.md", "crumbs": "Some>>Other>>Data"},
+        ),
+        Document(
+            id=f"Other file {random.randint(1, 1337)}",
+            page_content="Some other content",
+            metadata={"from": "other_file.md", "crumbs": "Some>>Other>>Data"},
+        ),
+    ]
+
+    await vec_store.add_documents(new_docs)
+
+    found_files = await vec_store.get_documents_from_file(".md")
+
+    for doc_orig, doc_found in zip(new_docs, found_files):
+        assert doc_orig.id and doc_found.id
+        assert doc_orig.id == doc_found.id
+        assert doc_orig.page_content == doc_found.page_content
 
 
 '''
