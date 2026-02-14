@@ -73,8 +73,11 @@ async def load_models_and_index() -> None:
 
 async def shutdown_rag():
     shutdown_thread_pool()
+    await vector_store.cleanup()
+    await snippet_cache.cleanup()
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
