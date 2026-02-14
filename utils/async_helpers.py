@@ -1,13 +1,14 @@
 import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Callable
+from typing import Optional, Callable, TypeVar
 
 # Global thread pool
 rag_thread_pool: Optional[ThreadPoolExecutor] = None
+_T = TypeVar("_T")
 
 
-async def execute_async(operation: Callable):
+async def execute_async(operation: Callable[..., _T]) -> _T:
     thread_pool = get_thread_pool()
     event_loop = asyncio.get_event_loop()
     return await event_loop.run_in_executor(thread_pool, operation)
