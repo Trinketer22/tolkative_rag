@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Header, Request
 from contextlib import asynccontextmanager
 import logging
 
-from config import settings
+from config import Settings, settings
 from utils.async_helpers import shutdown_thread_pool
 
 from services.vector_store import vector_store
@@ -11,7 +11,7 @@ from services.llm import llm_service
 from services.reranking import reranker
 from services.snippet_cache import snippet_cache
 
-from api.routes import context, completion_proxy, models as llm_models, health
+from api.routes import context, completion_proxy, models as llm_models, health, admin
 from api.logware import log_requests
 
 @asynccontextmanager
@@ -22,27 +22,22 @@ async def lifespan(app: FastAPI):
 
     await shutdown_rag()
 
-app = FastAPI(lifespan = lifespan)
-app.middleware("http")(log_requests)
 
-app.include_router(
-    context.router,
-    tags = ["context"]
-)
-app.include_router(
-    completion_proxy.router,
-    tags = ["proxy"]
-)
-app.include_router(
-    llm_models.router,
-    tags = ["models"]
-)
-app.include_router(
-    health.router,
-    tags = ["models"]
-)
+def create_app(config: Settings) -> FastAPI:
+    app = FastAPI(lifespan=lifespan)
+    app.middleware("http")(log_requests)
+
+    app.include_router(context.router, tags=["context"])
+    app.include_router(completion_proxy.router, tags=["proxy"])
+    app.include_router(llm_models.router, tags=["models"])
+    app.include_router(health.router, tags=["health"])
+
+    if config.ENABLE_ADMIN:
+        app.include_router(admin.router, prefix=config.ADMIN_PREFIX)
+    return app
 
 
+app = create_app(settings)
 log = logging.getLogger("rag_backend")
 log.setLevel(settings.LOG_LEVEL)
 
