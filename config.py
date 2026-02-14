@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     )
     TOP_MODEL: str = "claude-sonnet-4.5"
 
+    # Admin configuration
+    ENABLE_ADMIN: bool = True
+    ADMIN_PREFIX: str = "/admin"
+    ADMIN_AUTH_TOKEN: str = "secret"
+    ADMIN_UNAUTHORIZED_BANNER: str = "Access denied"
+
     # Paths
     CONFIG_PATH: Path = Path(__file__).resolve().parent
     INDEX_PATH: str = str(CONFIG_PATH / Path("indexes/full_separate_snip"))

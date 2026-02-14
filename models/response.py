@@ -47,3 +47,15 @@ class ChatCompletionResponse(BaseModel):
     # Custom fields
     cached: bool = False
     retrieval_metadata: Optional[Dict[str, Any]] = None
+
+
+class RemoveFileResponse(BaseModel):
+    file_path: str
+    removed_docs: List[str]
+    removed_snippers: List[str]
+
+
+class AddMarkdownResponse(BaseModel):
+    file_path: str
+    new_documents: List[str]
+    new_snippets: List[str]
