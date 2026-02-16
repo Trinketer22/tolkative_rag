@@ -6,7 +6,7 @@ Wraps HuggingFace embeddings
 import asyncio
 import hashlib
 import logging
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Sequence
 from collections import OrderedDict
 import numpy as np
 import unicodedata
@@ -82,7 +82,7 @@ class EmbeddingService:
         Returns:
             Embedding vector (list of floats)
         """
-        if not self._initialized:
+        if not self._initialized or self.embedder is None:
             raise RuntimeError(
                 "EmbeddingService not initialized. Call initialize() first."
             )
@@ -100,7 +100,8 @@ class EmbeddingService:
         self.stats["cache_misses"] += 1
         log.debug(f"Embedding cache MISS: {text[:50]}...")
 
-        embedding = await execute_async(lambda: self.embedder.embed_query(text))
+        embedder = self.embedder
+        embedding = await execute_async(lambda: embedder.embed_query(text))
 
         self.stats["embeddings_computed"] += 1
 
@@ -119,7 +120,7 @@ class EmbeddingService:
         Returns:
             List of embedding vectors
         """
-        if not self._initialized:
+        if not self._initialized or self.embedder is None:
             raise RuntimeError(
                 "EmbeddingService not initialized. Call initialize() first."
             )
@@ -127,8 +128,9 @@ class EmbeddingService:
         if not texts:
             return []
 
+        embedder = self.embedder
         # Check which embeddings are cached
-        embeddings = [None] * len(texts)
+        embeddings: List[List[float]] = [None] * len(texts)
         texts_to_compute = []
         text_to_idx = {}
 
@@ -151,7 +153,7 @@ class EmbeddingService:
             )
 
             computed_embeddings = await execute_async(
-                lambda: self.embedder.embed_documents(texts_to_compute)
+                lambda: embedder.embed_documents(texts_to_compute)
             )
 
             self.stats["embeddings_computed"] += len(texts_to_compute)

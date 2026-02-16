@@ -4,13 +4,13 @@ from models.domain import Message, IntentInfo
 from models.response import ContextResponse
 from config import settings
 from query.lang_detection import extract_code_from_query, exclude_context_by_lang
-from core.rendering import render_docs_batch, render_single_doc
+from core.rendering import render_docs_batch
 from services.llm import llm_service
 from services.vector_store import vector_store
 from services.embedding import embedding_service
 
 from services.reranking import reranker
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Sequence
 from langchain_core.documents import Document
 
 log = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class InputError(Exception):
     pass
 
 
-def _get_system_context() -> str:
+def _get_system_context() -> Message:
     context = settings.SYSTEM_PROMPT
     return Message(role="system", content=context)
 
@@ -31,7 +31,7 @@ async def retrieve_documents_by_headers(
     threshold: float = settings.HEADER_THRESHOLD,
     filter_lambda=None,
     top_k=settings.DEFAULT_HEADERS_RETRIEAVAL_SIZE,
-) -> List[Document]:
+) -> Sequence[Document]:
     log.debug(f"Headers query: {query}")
     # Don't pre-filter, because header documents don't have metadata
     doc_batch = await vector_store.search(
@@ -42,16 +42,20 @@ async def retrieve_documents_by_headers(
         with_score=True,
         filter_fn=None,
     )
-    header_docs = [
+    header_docs: Sequence[Document] = [
         doc[0]
         for doc in doc_batch
         # No re-ranking with headers, since
-        if doc[1] >= threshold
+        if isinstance(doc, tuple) and doc[1] >= threshold
     ]
     if len(header_docs) > 0:
         # But the actual docs do have meta and can be filtered
-        result = vector_store.get_by_ids(list(map(lambda doc: doc.id, header_docs)))
-        docs_ranked = await reranker.rerank(query=query, documents=result)
+        result = await vector_store.get_by_ids(
+            list(map(lambda doc: doc.id, header_docs))
+        )
+        docs_ranked: Sequence[Document] = await reranker.rerank(
+            query=query, documents=result
+        )
         if filter_lambda is not None:
             docs_ranked = list(filter(filter_lambda, docs_ranked))
         return await top_k_tree(docs_ranked, set(), top_k)
@@ -96,7 +100,7 @@ async def retrieve_documents(
         docs_ranked = await reranker.rerank(
             query=rerank_against, documents=initial_docs
         )
-        return await top_k_tree(docs_ranked, set(), top_k)
+        return list(await top_k_tree(docs_ranked, set(), top_k))
         """
         Leave it for a better day
         parent_set = set([doc.id for doc in docs_ranked])
@@ -122,8 +126,10 @@ async def retrieve_documents(
 
 # Traversing the retrieved knowlage graph, and then picking the top k nodes by rank.
 # Other than just the order they were retrieved
-async def top_k_tree(docs: List[Document], watch_set: set, top_k: int):
-    doc_graph = traverse_knowledge_graph(docs, watch_set)
+async def top_k_tree(
+    docs: Sequence[Document], watch_set: set, top_k: int
+) -> Sequence[Document]:
+    doc_graph = await traverse_knowledge_graph(docs, watch_set)
     doc_graph.sort(key=lambda doc: doc.metadata.get("rerank_score", 0.0), reverse=True)
     return doc_graph[:top_k]
 
@@ -141,8 +147,8 @@ async def top_k_tree(docs: List[Document], watch_set: set, top_k: int):
 """
 
 
-def traverse_knowledge_graph(
-    chunks: List[Document],
+async def traverse_knowledge_graph(
+    chunks: Sequence[Document],
     watch_set: set,
     cur_depth=0,
     max_depth=settings.CONTEXT_REF_DEPTH,
@@ -176,8 +182,8 @@ def traverse_knowledge_graph(
             ):
                 log.debug(f"Fetching child docs from {chunk.id}")
                 log.debug(f"Direct children {len(children_ids)}")
-                child_docs = traverse_knowledge_graph(
-                    vector_store.get_by_ids(children_ids),
+                child_docs = await traverse_knowledge_graph(
+                    await vector_store.get_by_ids(children_ids),
                     watch_set,
                     cur_depth + 1,
                     parent_score=child_score,
@@ -190,8 +196,8 @@ def traverse_knowledge_graph(
             ):
                 log.debug(f"Fetching referenced docs from {chunk.id}")
                 log.debug(f"{len(ref_ids)} references found")
-                ref_docs = traverse_knowledge_graph(
-                    vector_store.get_by_ids(ref_ids),
+                ref_docs = await traverse_knowledge_graph(
+                    await vector_store.get_by_ids(ref_ids),
                     watch_set,
                     cur_depth + 1,
                     parent_score=ref_score,
@@ -201,7 +207,7 @@ def traverse_knowledge_graph(
     return uniq_chunks
 
 
-def add_uniq_context(chunks: List[Document], watch_set: set):
+def add_uniq_context(chunks: Sequence[Document], watch_set: set):
     uniq_context = []
     for chunk in chunks:
         if chunk.id not in watch_set:
@@ -292,7 +298,7 @@ async def pull_context(
     user_msg = orig_msgs[-1].content
     context = []
     has_system = any(msg.role == "system" for msg in orig_msgs)
-    system_msg = None
+    system_msg: Optional[Message] = None
     intent_topics: IntentInfo = IntentInfo(intent=user_msg, concepts=[])
     # If there is no system message, put it before the user message
     if not has_system:
@@ -308,8 +314,10 @@ async def pull_context(
     )
     quick_path = False
 
-    text_ctx = await retrieve_documents(
-        user_msg, filter_lambda=filter_context, rerank_against=user_msg
+    text_ctx = list(
+        await retrieve_documents(
+            user_msg, filter_lambda=filter_context, rerank_against=user_msg
+        )
     )
     log.debug(f"Initial text search brought {len(text_ctx)} results")
 

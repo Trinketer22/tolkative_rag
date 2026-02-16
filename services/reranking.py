@@ -1,6 +1,7 @@
 from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
+from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
-from typing import Sequence, Optional
+from typing import List, Sequence, Optional
 from concurrent.futures import ThreadPoolExecutor
 from services.embedding import embedding_service
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
@@ -32,6 +33,7 @@ class CrossEncoderRerankerWithScores(CrossEncoderReranker):
         self,
         documents: Sequence[Document],
         query: str,
+        callbacks: Optional[Callbacks] = None,
     ) -> Sequence[Document]:
         if len(documents) == 0:
             return []
@@ -57,6 +59,7 @@ class CrossEncoderRerankerWithScores(CrossEncoderReranker):
         self,
         documents: Sequence[Document],
         query: str,
+        callbacks: Optional[Callbacks] = None,
     ) -> Sequence[Document]:
         if len(documents) == 0:
             return []
@@ -100,8 +103,8 @@ class RerankingService:
         )
         self._initilized = True
 
-    async def rerank(self, documents: Sequence[Document], query: str):
-        if not self._initilized:
+    async def rerank(self, documents: List[Document], query: str):
+        if not self._initilized or self.cross_encoder is None:
             raise RuntimeError("Reranker is not initialized")
         return await self.cross_encoder.acompress_documents(documents, query)
 

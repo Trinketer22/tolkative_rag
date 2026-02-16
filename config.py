@@ -4,7 +4,7 @@ Loads from environment variables.
 """
 
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Optional, Tuple, Literal
 
 
@@ -27,6 +27,12 @@ class Settings(BaseSettings):
         "GPT-5.1-Codex-Mini"  # "gpt-4o-mini"#"GPT-5.1-Codex-Mini"# "gpt-4o-mini"
     )
     TOP_MODEL: str = "claude-sonnet-4.5"
+
+    # Admin configuration
+    ENABLE_ADMIN: bool = True
+    ADMIN_PREFIX: str = "/admin"
+    ADMIN_AUTH_TOKEN: str = "secret"
+    ADMIN_UNAUTHORIZED_BANNER: str = "Access denied"
 
     # Paths
     CONFIG_PATH: Path = Path(__file__).resolve().parent
@@ -233,9 +239,7 @@ When code examples provided in the context satisfy user request:
 - If you must reference code, use EXACT copy-paste
     """
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = (True,)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 
 settings = Settings()

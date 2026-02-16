@@ -1,3 +1,4 @@
+from typing import Dict, List
 from langchain_core.documents import Document
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -16,9 +17,9 @@ def main():
         print("Not enough arguments")
         help()
 
-    uniq_docs = {}
+    uniq_docs: Dict[str, Document] = {}
     print("Loading documents...")
-    docs = list(
+    docs: List[Document] = list(
         map(
             lambda doc: Document(
                 id=doc["id"], page_content=doc["page_content"], metadata=doc["metadata"]
@@ -34,9 +35,11 @@ def main():
 
     # Last doc wins in id clash
     for doc in docs:
+        if not doc.id:
+            raise RuntimeError("Document without id is supplied")
         uniq_docs[doc.id] = doc
 
-    clean_docs = uniq_docs.values()
+    clean_docs = list(uniq_docs.values())
 
     print("Building main index...")
     full_storage = FAISS.from_documents(clean_docs, embedding=embedder)

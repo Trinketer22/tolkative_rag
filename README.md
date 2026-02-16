@@ -27,6 +27,10 @@ It's sole purpose is to inject additional context between the consumer and the m
 
 Agent acts on the data, RAG provides the data.
 
+However, agent example that uses RAG capabilities is [available](/client).
+
+On top of that, there is openapi definition available at `http://<rag_server_url>/openapi.json`
+
 ### It is not an MCP Server
 
 Even though, current implementation
@@ -38,6 +42,50 @@ It's a **STATELESS** context providing machine.
 MCP server can later perform any caching of the context provided.
 
 Bottom line, it serves the `C` in the `MCP`.
+
+RAG should be wrapped in a MCP server tool.
+
+Here is an example implementation:
+
+```python
+
+async def call_rag(query: str):
+    cur_retries = 0
+    url = rag_url
+    if not url:
+        raise ValueError("RAG_URL environment variable is not set!")
+
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=rag_query_timeout) as client:
+                response = await client.post(
+                    url,
+                    json=ChatCompletionRequest(
+                        model=llm.model_name,
+                        messages=[Message(role="user", content=query)],
+                    ).model_dump(exclude_unset=True),
+                )
+
+            ctx_resp = ContextResponse(**response.json())
+            return ctx_resp.context.content
+
+        except Exception as e:
+            print(f"Unknown error {e}")
+            cur_retries += 1
+            if cur_retries > max_retries:
+                return "RAG request error. Do not retry the tool"
+
+tool_rag = StructuredTool.from_function(
+    func=None,
+    coroutine=call_rag,
+    name="doc_query_tool",
+    description="This tool allows to query TON documentation for additional info",
+    args_schema=RagInput,
+)
+tools = [tool_rag]
+```
+
+For more details check the [client](/client)
 
 ### It does not just send all the documents for every query
 
@@ -63,9 +111,21 @@ Download and extract to rag-data
 
 ### Local env instalation
 
+In general it is enough to setup the venv and run:
+
 ```shell
 pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e .
 
+```
+
+#### Dev
+
+For the development environment setup additional dependencies required for the unit tests to run:
+
+```shell
+
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e ".[test]"
+``
 ```
 
 #### Setup rag index
@@ -94,11 +154,26 @@ sudo docker run --name rag_server --network rag_network -v <Path to your .env fi
 
 Currently there is no convenient interface for that.
 
-However, documents are stored as newline separated json objects `jsonl`.
-Which means that one could easily add/remove documents by appending/removing lines
-with documents content, then just perform index rebuild using `rag-setup`.
+However, admin REST APIs are now available.
+Swagger interface can be checked at `http://<rag_server_url>/docs`.
 
-It only takes a couple of minutes.
+Note that admin API is protected with Bearer authorization.
+
+Check the following configuration parameters:
+
+```python
+# Admin configuration
+ENABLE_ADMIN: bool = True
+ADMIN_PREFIX: str = "/admin"
+ADMIN_AUTH_TOKEN: str = "secret"
+ADMIN_UNAUTHORIZED_BANNER: str = "Access denied"
+```
+
+Documents are stored as newline separated json objects `jsonl` in `rag-data` directory.
+Which means that one could easily add/remove documents by appending/removing lines
+with documents content, then just perform index rebuild using `rag-setup` script.
+
+Rebuild will only take a couple of minutes
 
 For a deep dive into documents structure, check [PrepareData](/notebooks/PrepareData.ipynb) jupyter notebook.
 
