@@ -1,5 +1,7 @@
 import json
-from typing import Optional, Callable
+from typing import Mapping, Optional, Callable
+
+from pydantic import BaseModel
 
 
 def load_json_dump(path: str, obj_constuctor: Optional[Callable] = None):
@@ -11,6 +13,14 @@ def load_json_dump(path: str, obj_constuctor: Optional[Callable] = None):
                 parsed_obj if obj_constuctor is None else obj_constuctor(parsed_obj)
             )
             parsed_data.append(new_obj)
+    return parsed_data
+
+
+def save_json_dump(path: str, snippets: Mapping[str, BaseModel]):
+    parsed_data = []
+    with open(path, "w", encoding="utf8") as data_file:
+        for v in snippets.values():
+            data_file.write(f"{v.model_dump_json()}\n")
     return parsed_data
 
 
