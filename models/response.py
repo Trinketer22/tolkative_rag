@@ -8,12 +8,17 @@ class ModelsResponse(BaseModel):
     data: List[Model]
 
 
-class ContextResponse(BaseModel):
+class MessageContextResponse(BaseModel):
     context: Message
     ctx_token_count: int
     raw_context: Optional[List[Dict]] = None
     system: Optional[Message] = None
     intent: Optional[IntentInfo] = None
+
+
+class ContextResponse(BaseModel):
+    context: str
+    ctx_token_count: int
 
 
 class ChatCompletionChoice(BaseModel):

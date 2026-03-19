@@ -1,7 +1,7 @@
 import logging
 import asyncio
 from models.domain import Message, IntentInfo
-from models.response import ContextResponse
+from models.response import ContextResponse, MessageContextResponse
 from config import settings
 from query.lang_detection import extract_code_from_query, exclude_context_by_lang
 from core.rendering import render_docs_batch
@@ -284,7 +284,7 @@ async def retrieve_topic(
 
 async def pull_context(
     orig_msgs: List[Message], max_tokens: Optional[int] = None
-) -> ContextResponse:
+) -> MessageContextResponse:
     # Basic input checks
     # Could have searched over all messages, but let's not compilcate things here.
     if len(orig_msgs) == 0 or orig_msgs[-1].role != "user":
@@ -425,7 +425,7 @@ async def pull_context(
     if settings.ADD_RAW_CONTEXT:
         raw_context = list(map(lambda doc: doc.model_dump(), context))
 
-    return ContextResponse(
+    return MessageContextResponse(
         context=Message(role="user", content=f"{rendered_ctx}\n\n{user_msg}"),
         ctx_token_count=token_count,
         raw_context=raw_context,
