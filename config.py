@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     # And the query is not considered complex.
     # We can skip the LLM extraction
     SKIP_LLM_EXTRACTION: Tuple[int, float] = (3, 4.25)
+    QUICKPATH_ONLY: bool = False
 
     # Logging
     LOG_LEVEL: str = "INFO"  # "DEBUG"

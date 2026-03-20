@@ -312,7 +312,7 @@ async def pull_context(
     filter_context, skip_languages = exclude_context_by_lang(
         code_detect.query_tokens, code_detect.languages_detected
     )
-    quick_path = False
+    quick_path = settings.QUICKPATH_ONLY
 
     text_ctx = list(
         await retrieve_documents(
@@ -321,14 +321,14 @@ async def pull_context(
     )
     log.debug(f"Initial text search brought {len(text_ctx)} results")
 
-    if not code_detect.complex_query:
+    if quick_path or (not code_detect.complex_query):
         res_sum = 0.0
         top_n = settings.SKIP_LLM_EXTRACTION[0]
         if len(text_ctx) >= top_n:
             for idx in range(top_n):
                 res_sum += text_ctx[idx].metadata["rerank_score"]
 
-        if res_sum / top_n >= settings.SKIP_LLM_EXTRACTION[1]:
+        if quick_path or (res_sum / top_n >= settings.SKIP_LLM_EXTRACTION[1]):
             # Allowed to skip llm extraction heavy path
             context = text_ctx
             quick_path = True
