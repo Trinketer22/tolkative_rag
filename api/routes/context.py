@@ -39,7 +39,7 @@ async def raw_context(request: ContextRequest):
             [Message(role="user", content=request.query)], request.max_tokens
         )
         return ContextResponse(
-            context=res_ctx.context.content, ctx_token_count=res_ctx.ctx_token_count
+            context=res_ctx.context, ctx_token_count=res_ctx.ctx_token_count
         )
     except InputError as e:
         raise HTTPException(

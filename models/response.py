@@ -9,7 +9,8 @@ class ModelsResponse(BaseModel):
 
 
 class MessageContextResponse(BaseModel):
-    context: Message
+    prompt_msg: Message
+    context: str
     ctx_token_count: int
     raw_context: Optional[List[Dict]] = None
     system: Optional[Message] = None

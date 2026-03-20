@@ -48,7 +48,7 @@ async def proxy_chat_completion(
             )
         # Prepare the request for OpenAI
         openai_request = request.model_dump(exclude_unset=True)
-        openai_request["messages"][-1] = request_ctx.context.model_dump(
+        openai_request["messages"][-1] = request_ctx.prompt_msg.model_dump(
             exclude_unset=True
         )
         openai_request["model"] = settings.TOP_MODEL

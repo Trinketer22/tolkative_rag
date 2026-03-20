@@ -426,7 +426,8 @@ async def pull_context(
         raw_context = list(map(lambda doc: doc.model_dump(), context))
 
     return MessageContextResponse(
-        context=Message(role="user", content=f"{rendered_ctx}\n\n{user_msg}"),
+        context=rendered_ctx,
+        prompt_msg=Message(role="user", content=f"{rendered_ctx}\n\n{user_msg}"),
         ctx_token_count=token_count,
         raw_context=raw_context,
         system=system_msg,
