@@ -18,7 +18,7 @@ def test_parse_doc():
     links = re.findall(r"(?<!!)\[([^\]]*)\]\(([^)]+)\)", test_doc, re.MULTILINE)
     docs, snippets = process_md(test_doc_path, test_doc)
     # Initial title is extracted from metadata
-    known_title = "Known issues"
+    known_title = "Known issues of FunC"
     assert headings is not None
     assert len(docs) == len(headings) + 1
     assert docs[0].metadata["concept"] == known_title
