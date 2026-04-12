@@ -239,7 +239,7 @@ def _topic_round_robin(max_context_length: int, *topics: List[Document]):
                 top_dog = topics[topic_idx][-cur_topic_left]
                 topic_lengths[topic_idx] = cur_topic_left - 1
                 doc_token_count = top_dog.metadata.get("token_count", 0)
-                total_tokens = doc_token_count + settings.CTX_RENDERING_OVERHEAD
+                total_tokens += doc_token_count + settings.CTX_RENDERING_OVERHEAD
                 if total_tokens > max_context_length:
                     if processed_docs == 0:
                         raise InputError(
