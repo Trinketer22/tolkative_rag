@@ -27,53 +27,28 @@ It's sole purpose is to inject additional context between the consumer and the m
 
 Agent acts on the data, RAG provides the data.
 
-However, agent example that uses RAG capabilities is [available](/client).
+However, an agent example that uses RAG capabilities is [available](/client).
 
-On top of that, there is openapi definition available at `http://<rag_server_url>/openapi.json`
+Recent client implementation details:
 
-### It is not an MCP Server
+- Built with LangGraph (`client/agent.py`, `client/cli_client.py`)
+- Uses RAG tool against `/context` with `ContextRequest(query=...)`
+- Uses in-memory conversation checkpointing (`MemorySaver`) in CLI mode
+- Supports custom model endpoint and prompts via env vars
 
-Even though, current implementation
-has ability to proxy user request with augmented context on the fly,
-It doesn't track the conversation scope , but only
-augments the last user message with the relevant context.
-It's a **STATELESS** context providing machine.
-
-MCP server can later perform any caching of the context provided.
-
-Bottom line, it serves the `C` in the `MCP`.
-
-RAG should be wrapped in a MCP server tool.
-
-Here is an example implementation:
+Simplified snippet from the LangGraph demo client (`client/agent.py`):
 
 ```python
+class RagInput(BaseModel):
+    query: str = Field(description="The input query")
 
 async def call_rag(query: str):
-    cur_retries = 0
-    url = rag_url
-    if not url:
-        raise ValueError("RAG_URL environment variable is not set!")
-
-    while True:
-        try:
-            async with httpx.AsyncClient(timeout=rag_query_timeout) as client:
-                response = await client.post(
-                    url,
-                    json=ChatCompletionRequest(
-                        model=llm.model_name,
-                        messages=[Message(role="user", content=query)],
-                    ).model_dump(exclude_unset=True),
-                )
-
-            ctx_resp = ContextResponse(**response.json())
-            return ctx_resp.context.content
-
-        except Exception as e:
-            print(f"Unknown error {e}")
-            cur_retries += 1
-            if cur_retries > max_retries:
-                return "RAG request error. Do not retry the tool"
+    async with httpx.AsyncClient(timeout=rag_query_timeout) as client:
+        response = await client.post(
+            rag_url,
+            json=ContextRequest(query=query).model_dump(exclude_unset=True),
+        )
+    return ContextResponse(**response.json()).context
 
 tool_rag = StructuredTool.from_function(
     func=None,
@@ -85,7 +60,110 @@ tool_rag = StructuredTool.from_function(
 tools = [tool_rag]
 ```
 
-For more details check the [client](/client)
+CLI client defaults:
+
+- `CTX_URL`: `http://localhost:8000/context`
+- `MODEL_NAME`: `claude-sonnet-4.6`
+- `OPENAI_API_BASE`: required in current CLI client setup
+
+For details and local run instructions check [client](/client) and `client/README.md`.
+
+On top of that, there is OpenAPI definition available at `http://<rag_server_url>/openapi.json`
+
+### RAG API vs MCP wrapper
+
+This FastAPI app is the RAG backend API. It is stateless and focuses on retrieval + context assembly.
+
+Separately, this repo now includes a minimal MCP wrapper example that exposes the RAG backend as an MCP tool.
+
+In other words:
+
+- RAG server (`main.py`) exposes HTTP endpoints such as `/context` and `/v1/chat/completions`
+- MCP server example (`scripts/mcp_server.py`) exposes MCP tool `get_ton_context(...)` and calls the RAG HTTP API
+
+So this project now contains both pieces: the core RAG API and an optional MCP adapter process.
+
+#### MCP wrapper example
+
+MCP example details:
+
+- `scripts/mcp_server.py` (FastMCP server)
+- exposes tool `get_ton_context(query, max_tokens=None)`
+- forwards calls to `/context` and returns `{ ok, context, ctx_token_count }`
+
+Useful env vars:
+
+- `CTX_URL` (default: `http://localhost:8000/context`)
+- `CTX_TIMEOUT` (default: `30` seconds)
+- `MCP_SERVER_NAME` (default: `tolkative-rag-mcp`)
+
+Install the MCP dependencies:
+
+```shell
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e ".[mcp]"
+```
+
+Then add the mcp definition to your agent configuration.
+
+For example for opencode:
+```json
+
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "...": {}
+  },
+  "mcp": {
+    "tolkative-rag": {
+      "type": "local",
+      "enabled": true,
+      "command": [
+        "/home/user/tolkative-rag/scripts/mcp_server.py"
+      ],
+      "environment": {
+        "CTX_URL": "http://localhost:8000/context"
+      },
+      "timeout": 15000
+    }
+  }
+}
+```
+
+For Codex CLI (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.tolkative-rag]
+command = "python"
+args = ["/home/user/tolkative-rag/scripts/mcp_server.py"]
+
+[mcp_servers.tolkative-rag.env]
+CTX_URL = "http://localhost:8000/context"
+CTX_TIMEOUT = "30"
+MCP_SERVER_NAME = "tolkative-rag-mcp"
+```
+
+For Claude Code (`.claude/settings.json` in project root, or `~/.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "tolkative-rag": {
+      "command": "python",
+      "args": [
+        "/home/user/tolkative-rag/scripts/mcp_server.py"
+      ],
+      "env": {
+        "CTX_URL": "http://localhost:8000/context",
+        "CTX_TIMEOUT": "30",
+        "MCP_SERVER_NAME": "tolkative-rag-mcp"
+      }
+    }
+  }
+}
+```
+
+If your agent uses a different MCP config schema/version, adapt field names accordingly (`mcp`, `mcpServers`, `mcp_servers`).
+
 
 ### It does not just send all the documents for every query
 
@@ -109,28 +187,81 @@ Current list of data sources is rather humble:
 Processed documents attached as release artifacts.
 Download and extract to rag-data
 
-### Local env instalation
+### Local env installation
 
-In general it is enough to setup the venv and run:
+In general it is enough to set up a venv and run:
 
 ```shell
 pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e .
 
 ```
 
-#### Dev
-
-For the development environment setup additional dependencies required for the unit tests to run:
+If you also plan to run the bundled MCP example, install with MCP extras:
 
 ```shell
-
-pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e ".[test]"
-``
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e ".[mcp]"
 ```
+
+#### Pull submodules
+
+Local development and tests require git submodules (documentation snapshots, examples, and TEPs data).
+
+```shell
+git submodule update --init
+```
+
+#### Dev
+
+For development, install additional dependencies required for unit tests:
+
+```shell
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e ".[test]"
+```
+
+#### Prepare data dump
+
+Build `rag-data/docs.jsonl` and `rag-data/latest_snippets.jsonl` before index setup:
+
+```shell
+python scripts/prepare_data.py
+```
+
+Useful flags:
+
+```shell
+python scripts/prepare_data.py --skip-instructions
+python scripts/prepare_data.py --output <custom-rag-data-path>
+```
+
+The data preparation step also consumes:
+
+- `rag-data/examples_mapping.json` for source-code example mappings
+- `rag-data/instructions_desc.json` for optional TVM instruction docs
+
+#### Build release artifacts on GitHub
+
+Workflow `.github/workflows/build-rag-data.yml` supports both manual and tag-driven release flows.
+
+- Manual run (`workflow_dispatch`): runs tests, builds dumps, uploads workflow artifacts.
+- Tag run (`push` on `v*`): runs tests first; only if tests pass it builds and publishes release assets.
+
+The workflow:
+
+- checks out repo with submodules
+- runs `pytest`
+- builds `rag-data/docs.jsonl` and `rag-data/latest_snippets.jsonl`
+- uploads the dumps as workflow artifact (`rag-data-dumps`)
+- on tag runs, attaches both files to the GitHub release
 
 #### Setup rag index
 
 Then run `rag-setup <path to docs.jsonl>` to build the index.
+
+Example:
+
+```shell
+rag-setup rag-data/docs.jsonl
+```
 
 ### Docker build
 
@@ -145,10 +276,10 @@ docker build -f docker/Dockerfile . -t rag_img
 #### Run the image
 
 ``` shell
-
-sudo docker run --name rag_server --network rag_network -v <Path to your .env file>:/app/.env:ro rag_img
-
+docker run --name rag_server -v <Path to your .env file>:/app/.env:ro rag_img
 ```
+
+This image runs `rag-setup rag-data/docs.jsonl` at build time, so make sure `rag-data/docs.jsonl` exists before `docker build`.
 
 ## How to add/modify documents
 
@@ -179,35 +310,39 @@ For a deep dive into documents structure, check [PrepareData](/notebooks/Prepare
 
 ## Endpoints
 
-Endpoints top level handlers are implemented at [routes](/api/routes)
+Endpoints top level handlers are implemented at [routes](/api/routes).
 
-Both endpoints support *OpenAI* [ChatCompletion](https://platform.openai.com/docs/api-reference/chat) as a request format for maximum compatibility.
+The service exposes OpenAI-compatible chat proxy endpoints and dedicated context-retrieval endpoints.
 
 ### Context
 
-Main endpoint for context retrieval.
-Mapped to `/context` url.
+There are two context endpoints:
 
-This endpoint respects the `max_tokens` parameter of the completion request.
-It would limit max token output including the rendering overhead.
+- `/chat_context` takes an OpenAI ChatCompletion request and returns the full message-context response.
+- `/context` takes a lightweight request payload:
 
-Takes completion request and returns:
+```json
+{"query": "...", "max_tokens": 20000}
+```
 
-``` python
+Current `/context` response model:
+
+```python
 class ContextResponse(BaseModel):
-    # Last user message with context augmented
-    context: Message
+    context: str
+    ctx_token_count: int
+```
 
-    # Enabled by settings.ADD_RAW_CONTEXT
-    # Raw documents in the internal representation.
-    # Note that internal representation doesn't continue
-    # code snippets in text, but only their reference ids
-    raw_context: Optional[List[Dict]]
-    # If system message isn't present, default one is proposed
+Current `/chat_context` response model:
+
+```python
+class MessageContextResponse(BaseModel):
+    prompt_msg: Message
+    context: str
+    ctx_token_count: int
+    raw_context: Optional[List[Dict]] = None
     system: Optional[Message] = None
-    #  User extracted intent and topics, if performed
     intent: Optional[IntentInfo] = None
-
 ```
 
 ### Chat completion
@@ -221,7 +356,7 @@ So, it can be used plug'n play with any ChatCompletion compatible tool.
 
 All the optional fields are passed as is to the LLM endpoint.
 
-[Streming](https://platform.openai.com/docs/api-reference/responses-streaming) **is supported**.
+[Streaming](https://platform.openai.com/docs/api-reference/responses-streaming) **is supported**.
 
 ### Models
 
@@ -229,6 +364,10 @@ Some tools require the model name, to interact with ChatCompletion endpoint.
 Model endpoint is also compatible with the [OpenAI Models](https://platform.openai.com/docs/api-reference/models/list).
 
 Currently just outputs the model name from config.
+
+### Health
+
+Health endpoint is mapped to `/health`.
 
 ## How it works
 
@@ -341,61 +480,37 @@ Brief description of context retrieval pipeline implemented in `core/retrieval.p
 
 ``` mermaid
 graph TD
-    %% Input Layer
-    Input([User Query + Messages]) --> Validation{Input Validation}
-    Validation -- Invalid --> Error[400 Bad Request]
-    Validation -- Valid --> Processor[Query Processor]
+    Input([User Query + Messages]) --> Validation{Input validation}
+    Validation -- Invalid --> Error[400 invalid_input]
+    Validation -- Valid --> SystemCheck{System message present?}
+    SystemCheck -->|No| AddSystem[Attach default system prompt]
+    SystemCheck -->|Yes| LangDetect
+    AddSystem --> LangDetect[Code/language detection + context filters]
 
-    %% Query Processing
-    subgraph Query_Analysis [Query Processing & Labeling]
-        Processor --> CodeDetect{Code/Token Detection}
-        Processor --> KeywordMatch{Complex Indicator Check}
-        CodeDetect --> Complexity{Is Complex?}
-        KeywordMatch --> Complexity
-    end
+    LangDetect --> InitialRetrieval[Initial retrieve_documents(user_msg)\n(main index + rerank)]
+    InitialRetrieval --> InitTree[Knowledge tree traversal\nadd child_nodes + references\napply CHILDREN_PENALTY / REF_PENALTY\nrespect CONTEXT_REF_DEPTH]
+    InitTree --> QuickCheck{QUICKPATH_ONLY\nor simple-query score pass?}
 
-    %% Initial Retrieval
-    Complexity --> InitialRetrieval[Initial Retrieval: Main Index + Reranker]
+    QuickCheck -- Yes --> UseInitial[Use initial text context]
+    QuickCheck -- No --> TokenGate{Initial tokens >= max_tokens?}
+    TokenGate -- Yes --> UseInitial
+    TokenGate -- No --> IntentExtract[LLM intent + concepts extraction]
 
-    subgraph Shortcut_Logic [Simple Query Optimization]
-        InitialRetrieval --> ScoreCheck{Simple & Score > Threshold?}
-        ScoreCheck -- Yes --> Rendering
-    end
+    IntentExtract --> Embed[Embed intent and concept queries]
+    Embed --> ParallelFetch[Parallel retrieval:\nheaders(intent), text(intent), each concept\n(each path reranked)]
+    ParallelFetch --> DeepTree[Knowledge tree traversal per bucket\nadd child_nodes + references with penalties]
+    DeepTree --> MergeBuckets[Deduplicate and build buckets\nheaders + text + per-topic]
+    MergeBuckets --> RoundRobin[Round-robin selection under token budget]
 
-    %% Complex Path
-    ScoreCheck -- No / Is Complex --> IntentExtraction[LLM Intent & Concept Extraction]
+    UseInitial --> Render[render_docs_batch\n(inline snippets + language filter)]
+    RoundRobin --> Render
+    Render --> Response[MessageContextResponse:\ncontext, prompt_msg, system, intent, raw_context?]
 
-    subgraph Multi_Path_Retrieval [Parallel Retrieval Buckets]
-        IntentExtraction --> HeaderSearch[Headers Index Search]
-        IntentExtraction --> ConceptSearch[Multi-Concept Search]
-        IntentExtraction --> DeepSearch[Full Text Search]
-    end
-
-    %% Tree Traversal
-    HeaderSearch & ConceptSearch & DeepSearch --> TreeTraversal[Knowledge Tree Traversal]
-
-    subgraph Hierarchy_Logic [Structural Expansion]
-        TreeTraversal --> DirectChildren[Add Direct Children]
-        TreeTraversal --> References[Add Hyperlink Refs]
-        DirectChildren --> Scorer[Apply CHILDREN_PENALTY]
-        References --> Scorer
-    end
-
-    %% Final Ranking & Output
-    Scorer --> FinalRerank[Final Reranking & Thresholding]
-
-    subgraph Formatting [Final Context Assembly]
-        FinalRerank --> Buckets[Categorize into Buckets]
-        Buckets --> RR[Round-Robin Selection]
-        RR --> SnippetInlining[Inline Code Snippets from Cache]
-    end
-
-    SnippetInlining --> Rendering([Final Context Output])
-
-    %% Styling
-    style IntentExtraction fill:#f9f,stroke:#333
-    style InitialRetrieval fill:#bbf,stroke:#333
-    style Shortcut_Logic stroke-dasharray: 5 5
+    style ParallelFetch fill:#bbf,stroke:#333
+    style InitTree fill:#cfe,stroke:#333
+    style DeepTree fill:#cfe,stroke:#333
+    style IntentExtract fill:#f9f,stroke:#333
+    style QuickCheck stroke-dasharray: 5 5
 ```
 
 
@@ -425,6 +540,8 @@ First, the query text is processed in a following way:
 - If such token found, query is labeled as containing code, and language name is attached
 - All query tokens are matched against list of keywords, that supposed to indicate that query is likely complex.
 
+Detected language markers are also used to exclude unrelated language contexts during retrieval (for example, filtering FunC docs for Tolk-focused queries and vice versa).
+
 Query is labled complex if:
 
 - It contains code.
@@ -451,6 +568,24 @@ This behavior is regulated by following configuration parameter:
 SKIP_LLM_EXTRACTION: Tuple[int, float] = (3, 4.25)
 
 ```
+
+There is also an explicit quick-path switch:
+
+```python
+# Force retrieval-only flow for all requests
+QUICKPATH_ONLY: bool = False
+```
+
+When `QUICKPATH_ONLY` is enabled, the pipeline skips LLM intent/concept extraction and uses retrieval + reranking only.
+
+Additionally, topic retrieval has a top-quality shortcut to avoid over-expanding already strong matches:
+
+```python
+TOP_QUALITY_RETRIEVAL_SIZE: int = 1
+TOP_QUALITY_THRESHOLD: float = 6.5
+```
+
+If a topic's top rerank score exceeds `TOP_QUALITY_THRESHOLD`, only the top `TOP_QUALITY_RETRIEVAL_SIZE` document is kept for that topic.
 
 #### LLM powered intent and concepts extraction
 

@@ -246,7 +246,7 @@ class VectorStoreService:
             if not doc.id:
                 return found
 
-            doc_refs = doc.metadata.get("children_nodes", []) + doc.metadata.get(
+            doc_refs = doc.metadata.get("child_nodes", []) + doc.metadata.get(
                 "references", []
             )
             for ref in doc_refs:
@@ -287,10 +287,10 @@ class VectorStoreService:
             references = await self.get_document_references(ids)
             for ref in references:
                 assert ref.id
-                children = ref.metadata.get("children_nodes", [])
+                children = ref.metadata.get("child_nodes", [])
                 links = ref.metadata.get("references", [])
                 if children:
-                    ref.metadata["children_nodes"] = list(filter(filter_ids, children))
+                    ref.metadata["child_nodes"] = list(filter(filter_ids, children))
                 if links:
                     ref.metadata["references"] = list(filter(filter_ids, links))
                 doc_updates[ref.id] = ref
@@ -327,10 +327,10 @@ class VectorStoreService:
         update_docs = {**docs}
         for ref in references:
             assert ref.id
-            children = ref.metadata.get("children_nodes", [])
+            children = ref.metadata.get("child_nodes", [])
             links = ref.metadata.get("references", [])
             if children:
-                ref.metadata["children_nodes"] = list(map(id_update, children))
+                ref.metadata["child_nodes"] = list(map(id_update, children))
             if links:
                 ref.metadata["references"] = list(map(id_update, links))
 

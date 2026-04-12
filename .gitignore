@@ -3,10 +3,11 @@
 .env
 .venv
 __pycache__
-rag-data
+rag-data/*
 chroma-data
 indexes
 *.jsonl
 *.json
+!rag-data/instructions_desc.json
 *.log
 *.so

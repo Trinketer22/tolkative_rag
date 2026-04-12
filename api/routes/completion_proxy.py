@@ -28,7 +28,9 @@ async def proxy_chat_completion(
         log.debug(
             f"Completion requested: {json.dumps(request.model_dump(exclude_unset=True))}"
         )
-        request_ctx = await pull_context(request.messages)
+        request_ctx = await pull_context(
+            request.messages, request.max_completion_tokens or request.max_tokens
+        )
         if request_ctx.ctx_token_count == 0:
             return ChatCompletionResponse(
                 id=str(uuid4()),
@@ -46,7 +48,7 @@ async def proxy_chat_completion(
             )
         # Prepare the request for OpenAI
         openai_request = request.model_dump(exclude_unset=True)
-        openai_request["messages"][-1] = request_ctx.context.model_dump(
+        openai_request["messages"][-1] = request_ctx.prompt_msg.model_dump(
             exclude_unset=True
         )
         openai_request["model"] = settings.TOP_MODEL

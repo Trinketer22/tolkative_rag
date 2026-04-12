@@ -7,8 +7,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
 
-from models.domain import Message
-from models.request import ChatCompletionRequest
+from models.request import ContextRequest
 from models.response import ContextResponse
 from state import AgentState
 
@@ -46,14 +45,13 @@ def create_app_workflow(
                 async with httpx.AsyncClient(timeout=rag_query_timeout) as client:
                     response = await client.post(
                         url,
-                        json=ChatCompletionRequest(
-                            model=llm.model_name,
-                            messages=[Message(role="user", content=query)],
+                        json=ContextRequest(
+                            query=query,
                         ).model_dump(exclude_unset=True),
                     )
 
                 ctx_resp = ContextResponse(**response.json())
-                return ctx_resp.context.content
+                return ctx_resp.context
 
             except Exception as e:
                 print(f"Unknown error {e}")

@@ -20,7 +20,7 @@ def hierarchial_documents() -> List[Document]:
             page_content="Top document about earth and it's satelites",
             metadata={
                 "crumbs": "Space>>Earth orbit",
-                "children_nodes": [
+                "child_nodes": [
                     "Earth",
                     "Moon",
                 ],
@@ -292,7 +292,7 @@ async def test_delete_hierarchial_document(
 ):
     top_doc = hierarchial_documents[0]
     assert top_doc.id == "Earth orbit"
-    children_ids = top_doc.metadata["children_nodes"]
+    children_ids = top_doc.metadata["child_nodes"]
     children_nodes = [
         doc for doc in hierarchial_documents if doc.id and doc.id in children_ids
     ]
@@ -320,7 +320,7 @@ async def test_delete_hierarchial_document(
     untouched_after = after_update[1]
     assert untouched_after.id == untouched_doc.id
 
-    updated_children = top_after.metadata["children_nodes"]
+    updated_children = top_after.metadata["child_nodes"]
 
     # Removed expected id from children of the top doc
     # Other elements unchanged
@@ -410,10 +410,10 @@ async def test_update_documents_new_id(
                 assert upd_id == orig_id
 
     for orig_doc, updated_doc in zip(hierarchial_documents, after_update):
-        children = orig_doc.metadata.get("children_nodes", [])
+        children = orig_doc.metadata.get("child_nodes", [])
         refs = orig_doc.metadata.get("references", [])
         if len(children) > 0:
-            updated_children = updated_doc.metadata.get("children_nodes", [])
+            updated_children = updated_doc.metadata.get("child_nodes", [])
             check_id_update(children, updated_children)
         if len(refs) > 0:
             updated_refs = updated_doc.metadata.get("references", [])

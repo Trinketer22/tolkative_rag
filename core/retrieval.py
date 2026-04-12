@@ -1,7 +1,7 @@
 import logging
 import asyncio
 from models.domain import Message, IntentInfo
-from models.response import ContextResponse
+from models.response import ContextResponse, MessageContextResponse
 from config import settings
 from query.lang_detection import extract_code_from_query, exclude_context_by_lang
 from core.rendering import render_docs_batch
@@ -239,7 +239,7 @@ def _topic_round_robin(max_context_length: int, *topics: List[Document]):
                 top_dog = topics[topic_idx][-cur_topic_left]
                 topic_lengths[topic_idx] = cur_topic_left - 1
                 doc_token_count = top_dog.metadata.get("token_count", 0)
-                total_tokens = doc_token_count + settings.CTX_RENDERING_OVERHEAD
+                total_tokens += doc_token_count + settings.CTX_RENDERING_OVERHEAD
                 if total_tokens > max_context_length:
                     if processed_docs == 0:
                         raise InputError(
@@ -284,7 +284,7 @@ async def retrieve_topic(
 
 async def pull_context(
     orig_msgs: List[Message], max_tokens: Optional[int] = None
-) -> ContextResponse:
+) -> MessageContextResponse:
     # Basic input checks
     # Could have searched over all messages, but let's not compilcate things here.
     if len(orig_msgs) == 0 or orig_msgs[-1].role != "user":
@@ -312,7 +312,7 @@ async def pull_context(
     filter_context, skip_languages = exclude_context_by_lang(
         code_detect.query_tokens, code_detect.languages_detected
     )
-    quick_path = False
+    quick_path = settings.QUICKPATH_ONLY
 
     text_ctx = list(
         await retrieve_documents(
@@ -321,14 +321,14 @@ async def pull_context(
     )
     log.debug(f"Initial text search brought {len(text_ctx)} results")
 
-    if not code_detect.complex_query:
+    if quick_path or (not code_detect.complex_query):
         res_sum = 0.0
         top_n = settings.SKIP_LLM_EXTRACTION[0]
         if len(text_ctx) >= top_n:
             for idx in range(top_n):
                 res_sum += text_ctx[idx].metadata["rerank_score"]
 
-        if res_sum / top_n >= settings.SKIP_LLM_EXTRACTION[1]:
+        if quick_path or (res_sum / top_n >= settings.SKIP_LLM_EXTRACTION[1]):
             # Allowed to skip llm extraction heavy path
             context = text_ctx
             quick_path = True
@@ -425,8 +425,9 @@ async def pull_context(
     if settings.ADD_RAW_CONTEXT:
         raw_context = list(map(lambda doc: doc.model_dump(), context))
 
-    return ContextResponse(
-        context=Message(role="user", content=f"{rendered_ctx}\n\n{user_msg}"),
+    return MessageContextResponse(
+        context=rendered_ctx,
+        prompt_msg=Message(role="user", content=f"{rendered_ctx}\n\n{user_msg}"),
         ctx_token_count=token_count,
         raw_context=raw_context,
         system=system_msg,
