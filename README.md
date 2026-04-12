@@ -36,23 +36,7 @@ Recent client implementation details:
 - Uses in-memory conversation checkpointing (`MemorySaver`) in CLI mode
 - Supports custom model endpoint and prompts via env vars
 
-On top of that, there is OpenAPI definition available at `http://<rag_server_url>/openapi.json`
-
-### It is not an MCP Server
-
-Even though, current implementation
-has ability to proxy user request with augmented context on the fly,
-It doesn't track the conversation scope , but only
-augments the last user message with the relevant context.
-It's a **STATELESS** context providing machine.
-
-MCP server can later perform any caching of the context provided.
-
-Bottom line, it serves the `C` in the `MCP`.
-
-RAG should be wrapped in a MCP server tool.
-
-Here is a simplified snippet matching current `client/agent.py`:
+Simplified snippet from the LangGraph demo client (`client/agent.py`):
 
 ```python
 class RagInput(BaseModel):
@@ -84,6 +68,103 @@ CLI client defaults:
 
 For details and local run instructions check [client](/client) and `client/README.md`.
 
+On top of that, there is OpenAPI definition available at `http://<rag_server_url>/openapi.json`
+
+### RAG API vs MCP wrapper
+
+This FastAPI app is the RAG backend API. It is stateless and focuses on retrieval + context assembly.
+
+Separately, this repo now includes a minimal MCP wrapper example that exposes the RAG backend as an MCP tool.
+
+In other words:
+
+- RAG server (`main.py`) exposes HTTP endpoints such as `/context` and `/v1/chat/completions`
+- MCP server example (`scripts/mcp_server.py`) exposes MCP tool `get_ton_context(...)` and calls the RAG HTTP API
+
+So this project now contains both pieces: the core RAG API and an optional MCP adapter process.
+
+#### MCP wrapper example
+
+MCP example details:
+
+- `scripts/mcp_server.py` (FastMCP server)
+- exposes tool `get_ton_context(query, max_tokens=None)`
+- forwards calls to `/context` and returns `{ ok, context, ctx_token_count }`
+
+Useful env vars:
+
+- `CTX_URL` (default: `http://localhost:8000/context`)
+- `CTX_TIMEOUT` (default: `30` seconds)
+- `MCP_SERVER_NAME` (default: `tolkative-rag-mcp`)
+
+Install the MCP dependencies:
+
+```shell
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e ".[mcp]"
+```
+
+Then add the mcp definition to your agent configuration.
+
+For example for opencode:
+```json
+
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "...": {}
+  },
+  "mcp": {
+    "tolkative-rag": {
+      "type": "local",
+      "enabled": true,
+      "command": [
+        "/home/user/tolkative-rag/scripts/mcp_server.py"
+      ],
+      "environment": {
+        "CTX_URL": "http://localhost:8000/context"
+      },
+      "timeout": 15000
+    }
+  }
+}
+```
+
+For Codex CLI (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.tolkative-rag]
+command = "python"
+args = ["/home/user/tolkative-rag/scripts/mcp_server.py"]
+
+[mcp_servers.tolkative-rag.env]
+CTX_URL = "http://localhost:8000/context"
+CTX_TIMEOUT = "30"
+MCP_SERVER_NAME = "tolkative-rag-mcp"
+```
+
+For Claude Code (`.claude/settings.json` in project root, or `~/.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "tolkative-rag": {
+      "command": "python",
+      "args": [
+        "/home/user/tolkative-rag/scripts/mcp_server.py"
+      ],
+      "env": {
+        "CTX_URL": "http://localhost:8000/context",
+        "CTX_TIMEOUT": "30",
+        "MCP_SERVER_NAME": "tolkative-rag-mcp"
+      }
+    }
+  }
+}
+```
+
+If your agent uses a different MCP config schema/version, adapt field names accordingly (`mcp`, `mcpServers`, `mcp_servers`).
+
+
 ### It does not just send all the documents for every query
 
 Modern LLMs claim to have massive context windows, and
@@ -113,6 +194,12 @@ In general it is enough to set up a venv and run:
 ```shell
 pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e .
 
+```
+
+If you also plan to run the bundled MCP example, install with MCP extras:
+
+```shell
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu -e ".[mcp]"
 ```
 
 #### Pull submodules
