@@ -28,10 +28,10 @@ When code examples provided in the context satisfy user request:
     """
 
 workflow = create_app_workflow(
-    "claude-sonnet-4.5",
-    rag_url="http://localhost:8000/context",
+    model_name=os.environ.get("MODEL_NAME") or "claude-sonnet-4.6",
+    rag_url=os.environ.get("CTX_URL") or "http://localhost:8000/context",
     model_endpoint=os.environ["OPENAI_API_BASE"],
-    system_prompt=default_prompt,
+    system_prompt=os.environ.get("SYSTEM_PROMPT") or default_prompt,
 )
 app = workflow.compile(checkpointer=memory)
 
