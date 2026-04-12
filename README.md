@@ -238,6 +238,21 @@ The data preparation step also consumes:
 - `rag-data/examples_mapping.json` for source-code example mappings
 - `rag-data/instructions_desc.json` for optional TVM instruction docs
 
+#### Build release artifacts on GitHub
+
+Workflow `.github/workflows/build-rag-data.yml` supports both manual and tag-driven release flows.
+
+- Manual run (`workflow_dispatch`): runs tests, builds dumps, uploads workflow artifacts.
+- Tag run (`push` on `v*`): runs tests first; only if tests pass it builds and publishes release assets.
+
+The workflow:
+
+- checks out repo with submodules
+- runs `pytest`
+- builds `rag-data/docs.jsonl` and `rag-data/latest_snippets.jsonl`
+- uploads the dumps as workflow artifact (`rag-data-dumps`)
+- on tag runs, attaches both files to the GitHub release
+
 #### Setup rag index
 
 Then run `rag-setup <path to docs.jsonl>` to build the index.
