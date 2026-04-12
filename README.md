@@ -378,61 +378,37 @@ Brief description of context retrieval pipeline implemented in `core/retrieval.p
 
 ``` mermaid
 graph TD
-    %% Input Layer
-    Input([User Query + Messages]) --> Validation{Input Validation}
-    Validation -- Invalid --> Error[400 Bad Request]
-    Validation -- Valid --> Processor[Query Processor]
+    Input([User Query + Messages]) --> Validation{Input validation}
+    Validation -- Invalid --> Error[400 invalid_input]
+    Validation -- Valid --> SystemCheck{System message present?}
+    SystemCheck -->|No| AddSystem[Attach default system prompt]
+    SystemCheck -->|Yes| LangDetect
+    AddSystem --> LangDetect[Code/language detection + context filters]
 
-    %% Query Processing
-    subgraph Query_Analysis [Query Processing & Labeling]
-        Processor --> CodeDetect{Code/Token Detection}
-        Processor --> KeywordMatch{Complex Indicator Check}
-        CodeDetect --> Complexity{Is Complex?}
-        KeywordMatch --> Complexity
-    end
+    LangDetect --> InitialRetrieval[Initial retrieve_documents(user_msg)\n(main index + rerank)]
+    InitialRetrieval --> InitTree[Knowledge tree traversal\nadd child_nodes + references\napply CHILDREN_PENALTY / REF_PENALTY\nrespect CONTEXT_REF_DEPTH]
+    InitTree --> QuickCheck{QUICKPATH_ONLY\nor simple-query score pass?}
 
-    %% Initial Retrieval
-    Complexity --> InitialRetrieval[Initial Retrieval: Main Index + Reranker]
+    QuickCheck -- Yes --> UseInitial[Use initial text context]
+    QuickCheck -- No --> TokenGate{Initial tokens >= max_tokens?}
+    TokenGate -- Yes --> UseInitial
+    TokenGate -- No --> IntentExtract[LLM intent + concepts extraction]
 
-    subgraph Shortcut_Logic [Simple Query Optimization]
-        InitialRetrieval --> ScoreCheck{Simple & Score > Threshold?}
-        ScoreCheck -- Yes --> Rendering
-    end
+    IntentExtract --> Embed[Embed intent and concept queries]
+    Embed --> ParallelFetch[Parallel retrieval:\nheaders(intent), text(intent), each concept\n(each path reranked)]
+    ParallelFetch --> DeepTree[Knowledge tree traversal per bucket\nadd child_nodes + references with penalties]
+    DeepTree --> MergeBuckets[Deduplicate and build buckets\nheaders + text + per-topic]
+    MergeBuckets --> RoundRobin[Round-robin selection under token budget]
 
-    %% Complex Path
-    ScoreCheck -- No / Is Complex --> IntentExtraction[LLM Intent & Concept Extraction]
+    UseInitial --> Render[render_docs_batch\n(inline snippets + language filter)]
+    RoundRobin --> Render
+    Render --> Response[MessageContextResponse:\ncontext, prompt_msg, system, intent, raw_context?]
 
-    subgraph Multi_Path_Retrieval [Parallel Retrieval Buckets]
-        IntentExtraction --> HeaderSearch[Headers Index Search]
-        IntentExtraction --> ConceptSearch[Multi-Concept Search]
-        IntentExtraction --> DeepSearch[Full Text Search]
-    end
-
-    %% Tree Traversal
-    HeaderSearch & ConceptSearch & DeepSearch --> TreeTraversal[Knowledge Tree Traversal]
-
-    subgraph Hierarchy_Logic [Structural Expansion]
-        TreeTraversal --> DirectChildren[Add Direct Children]
-        TreeTraversal --> References[Add Hyperlink Refs]
-        DirectChildren --> Scorer[Apply CHILDREN_PENALTY]
-        References --> Scorer
-    end
-
-    %% Final Ranking & Output
-    Scorer --> FinalRerank[Final Reranking & Thresholding]
-
-    subgraph Formatting [Final Context Assembly]
-        FinalRerank --> Buckets[Categorize into Buckets]
-        Buckets --> RR[Round-Robin Selection]
-        RR --> SnippetInlining[Inline Code Snippets from Cache]
-    end
-
-    SnippetInlining --> Rendering([Final Context Output])
-
-    %% Styling
-    style IntentExtraction fill:#f9f,stroke:#333
-    style InitialRetrieval fill:#bbf,stroke:#333
-    style Shortcut_Logic stroke-dasharray: 5 5
+    style ParallelFetch fill:#bbf,stroke:#333
+    style InitTree fill:#cfe,stroke:#333
+    style DeepTree fill:#cfe,stroke:#333
+    style IntentExtract fill:#f9f,stroke:#333
+    style QuickCheck stroke-dasharray: 5 5
 ```
 
 
