@@ -1,0 +1,167 @@
+[
+  {
+    "examples_path": "tolk-contracts/contracts_Tolk/03_notcoin/",
+    "concept": "TOLK jetton contract example",
+    "lang": "tolk",
+    "labels": {
+      "errors.tolk": "Error codes and failure conditions",
+      "fees-management.tolk": "Fee configuration and fee processing",
+      "jetton-minter-contract.tolk": "Jetton minter contract implementation",
+      "jetton-utils.tolk": "Jetton helper utilities",
+      "jetton-wallet-contract.tolk": "Jetton wallet contract implementation",
+      "messages.tolk": "Jetton message types and handlers",
+      "storage.tolk": "Jetton storage layout and state"
+    }
+  },
+  {
+    "examples_path": "tolk-contracts/contracts_FunC/03_notcoin/",
+    "concept": "FunC jetton contract example",
+    "lang": "func",
+    "labels": {
+      "gas.fc": "Gas constants and gas accounting",
+      "jetton-minter-not.fc": "Jetton minter contract (Notcoin variant)",
+      "jetton-utils.fc": "Jetton helper utilities",
+      "jetton-wallet-not.fc": "Jetton wallet contract (Notcoin variant)",
+      "op-codes.fc": "Operation codes and message tags",
+      "workchain.fc": "Workchain and address helpers"
+    }
+  },
+  {
+    "examples_path": "tolk-contracts/contracts_Tolk/02_nft/",
+    "concept": "TOLK NFT contract example",
+    "lang": "tolk",
+    "labels": {
+      "errors.tolk": "NFT-specific error codes",
+      "fees-management.tolk": "NFT fee and royalty handling",
+      "messages.tolk": "NFT message formats and dispatch",
+      "nft-collection-contract.tolk": "NFT collection contract implementation",
+      "nft-item-contract.tolk": "NFT item contract implementation",
+      "storage.tolk": "NFT storage schema and persistence"
+    }
+  },
+  {
+    "examples_path": "tolk-contracts/contracts_FunC/02_nft/",
+    "concept": "FunC NFT contract example",
+    "lang": "func",
+    "labels": {
+      "nft-collection.fc": "NFT collection contract implementation",
+      "nft-item.fc": "NFT item contract implementation",
+      "op-codes.fc": "NFT operation codes",
+      "params.fc": "NFT constants and parameters"
+    }
+  },
+  {
+    "examples_path": "tolk-contracts/contracts_Tolk/06_vesting/",
+    "concept": "TOLK Vesting implementation",
+    "lang": "tolk",
+    "labels": {
+      "errors.tolk": "Vesting error codes",
+      "message-validation.tolk": "Incoming message validation for vesting",
+      "messages.tolk": "Vesting message formats",
+      "storage.tolk": "Vesting state structure",
+      "vesting-contract.tolk": "Vesting contract implementation"
+    }
+  },
+  {
+    "examples_path": "tolk-contracts/contracts_FunC/06_vesting/",
+    "concept": "FunC Vesting implementation",
+    "lang": "func",
+    "labels": {
+      "vesting_wallet.fc": "Vesting wallet contract implementation"
+    }
+  },
+  {
+    "examples_path": "tolk-contracts/contracts_FunC/07_telemint",
+    "concept": "Telegram gift (telemint) contract",
+    "lang": "func",
+    "doc_text_key": "telemint_readme",
+    "labels": {
+      "common.fc": "Shared Telemint helpers and constants",
+      "nft-collection-no-dns.fc": "Telemint NFT collection contract without DNS",
+      "nft-item-no-dns-cheap.fc": "Telemint NFT item contract without DNS"
+    }
+  },
+  {
+    "examples_path": "tolk-contracts/tests",
+    "concept": "Unit tests examples",
+    "lang": "typescript",
+    "doc_text": "Collection of unit tests examples",
+    "labels": {
+      "01_jetton/JettonWallet.spec.ts": "Jetton wallet behavior tests",
+      "01_jetton/utils.ts": "Jetton test helpers",
+      "02_nft/NFTCollectionAndItem.spec.ts": "NFT collection and item integration tests",
+      "03_notcoin/Notcoin.spec.ts": "Notcoin jetton integration tests",
+      "03_notcoin/gasUtils.ts": "Notcoin gas calculation helpers",
+      "03_notcoin/utils.ts": "Notcoin test helpers",
+      "04_sharded_tgbtc/JettonWallet.spec.ts": "Sharded tgbtc jetton wallet tests",
+      "04_sharded_tgbtc/StateInit.spec.ts": "Sharded tgbtc state init tests",
+      "04_sharded_tgbtc/gasUtils.ts": "Sharded tgbtc gas helpers",
+      "04_sharded_tgbtc/utils.ts": "Sharded tgbtc test helpers",
+      "05_wallet-v5/WalletW5.spec.ts": "Wallet v5 core behavior tests",
+      "05_wallet-v5/actions.ts": "Wallet v5 action builders",
+      "05_wallet-v5/bench-utils.ts": "Wallet v5 benchmark utilities",
+      "05_wallet-v5/config.ts": "Wallet v5 test configuration",
+      "05_wallet-v5/gasUtils.ts": "Wallet v5 gas helpers",
+      "05_wallet-v5/test-only-actions.ts": "Wallet v5 test-only action helpers",
+      "05_wallet-v5/utils.ts": "Wallet v5 common test helpers",
+      "05_wallet-v5/wallet-v5-bench.spec.ts": "Wallet v5 benchmark test suite",
+      "05_wallet-v5/wallet-v5-extensions.spec.ts": "Wallet v5 extension tests",
+      "05_wallet-v5/wallet-v5-external.spec.ts": "Wallet v5 external message tests",
+      "05_wallet-v5/wallet-v5-get.spec.ts": "Wallet v5 getter tests",
+      "05_wallet-v5/wallet-v5-internal.spec.ts": "Wallet v5 internal message tests",
+      "06_vesting/VestingWallet.spec.ts": "Vesting wallet behavior tests",
+      "07_telemint/Nft.spec.ts": "Telemint NFT contract tests",
+      "07_telemint/gasUtils.ts": "Telemint gas helpers",
+      "07_telemint/utils.ts": "Telemint test helpers",
+      "gas-logger.ts": "Shared gas logging utilities",
+      "my-compile.ts": "Compilation helper script"
+    }
+  },
+  {
+    "examples_path": "tolk-contracts/wrappers",
+    "concept": "Contract wrappers examples",
+    "lang": "typescript",
+    "doc_text": "Examples of various contracts TypeScript wrapper functions",
+    "labels": {
+      "01_jetton/JettonConstants.ts": "Jetton wrapper constants",
+      "01_jetton/JettonMinter.compile.ts": "Jetton minter compile wrapper",
+      "01_jetton/JettonMinter.ts": "Jetton minter TypeScript wrapper",
+      "01_jetton/JettonWallet.compile.ts": "Jetton wallet compile wrapper",
+      "01_jetton/JettonWallet.ts": "Jetton wallet TypeScript wrapper",
+      "02_nft/NFTCollection.compile.ts": "NFT collection compile wrapper",
+      "02_nft/NFTCollection.ts": "NFT collection TypeScript wrapper",
+      "02_nft/NFTItem.compile.ts": "NFT item compile wrapper",
+      "02_nft/NFTItem.ts": "NFT item TypeScript wrapper",
+      "03_notcoin/JettonConstants.ts": "Notcoin wrapper constants",
+      "03_notcoin/JettonMinter.compile.ts": "Notcoin jetton minter compile wrapper",
+      "03_notcoin/JettonMinter.ts": "Notcoin jetton minter TypeScript wrapper",
+      "03_notcoin/JettonWallet.compile.ts": "Notcoin jetton wallet compile wrapper",
+      "03_notcoin/JettonWallet.ts": "Notcoin jetton wallet TypeScript wrapper",
+      "04_sharded_tgbtc/JettonConstants.ts": "Sharded tgbtc wrapper constants",
+      "04_sharded_tgbtc/JettonMinter.compile.ts": "Sharded tgbtc minter compile wrapper",
+      "04_sharded_tgbtc/JettonMinter.ts": "Sharded tgbtc minter TypeScript wrapper",
+      "04_sharded_tgbtc/JettonWallet.compile.ts": "Sharded tgbtc wallet compile wrapper",
+      "04_sharded_tgbtc/JettonWallet.ts": "Sharded tgbtc wallet TypeScript wrapper",
+      "05_wallet-v5/Errors.ts": "Wallet v5 wrapper error definitions",
+      "05_wallet-v5/library-deployer.ts": "Wallet v5 library deployment helper",
+      "05_wallet-v5/wallet-v5-test.ts": "Wallet v5 wrapper test utilities",
+      "05_wallet-v5/wallet-v5.ts": "Wallet v5 TypeScript wrapper",
+      "05_wallet-v5/wallet_v5.compile.ts": "Wallet v5 compile wrapper",
+      "06_vesting/VestingWallet.compile.ts": "Vesting wallet compile wrapper",
+      "06_vesting/VestingWallet.ts": "Vesting wallet TypeScript wrapper",
+      "07_telemint/NftCollection.compile.ts": "Telemint NFT collection compile wrapper",
+      "07_telemint/NftCollection.ts": "Telemint NFT collection TypeScript wrapper",
+      "07_telemint/NftConstants.ts": "Telemint wrapper constants",
+      "07_telemint/NftItem.compile.ts": "Telemint NFT item compile wrapper",
+      "07_telemint/NftItem.ts": "Telemint NFT item TypeScript wrapper"
+    }
+  },
+  {
+    "examples_path": "tolk-contracts/contracts_FunC/05_wallet-v5/",
+    "concept": "FunC wallet v5 (W5) implementation",
+    "lang": "func",
+    "labels": {
+      "wallet_v5.fc": "Wallet v5 contract implementation"
+    }
+  }
+]

@@ -9,5 +9,6 @@ indexes
 *.jsonl
 *.json
 !rag-data/instructions_desc.json
+!rag-data/examples_mapping.json
 *.log
 *.so
