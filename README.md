@@ -478,8 +478,8 @@ Brief description of context retrieval pipeline implemented in `core/retrieval.p
 
 #### High level diagram
 
-``` mermaid
-graph TD
+```mermaid
+flowchart TD
     Input([User Query + Messages]) --> Validation{Input validation}
     Validation -- Invalid --> Error[400 invalid_input]
     Validation -- Valid --> SystemCheck{System message present?}
@@ -487,9 +487,9 @@ graph TD
     SystemCheck -->|Yes| LangDetect
     AddSystem --> LangDetect[Code/language detection + context filters]
 
-    LangDetect --> InitialRetrieval[Initial retrieve_documents(user_msg)\n(main index + rerank)]
-    InitialRetrieval --> InitTree[Knowledge tree traversal\nadd child_nodes + references\napply CHILDREN_PENALTY / REF_PENALTY\nrespect CONTEXT_REF_DEPTH]
-    InitTree --> QuickCheck{QUICKPATH_ONLY\nor simple-query score pass?}
+    LangDetect --> InitialRetrieval["Initial retrieve_documents(user_msg)<br/>(main index + rerank)"]
+    InitialRetrieval --> InitTree["Knowledge tree traversal<br/>add child_nodes + references<br/>apply CHILDREN_PENALTY / REF_PENALTY<br/>respect CONTEXT_REF_DEPTH"]
+    InitTree --> QuickCheck{"QUICKPATH_ONLY<br/>or simple-query score pass?"}
 
     QuickCheck -- Yes --> UseInitial[Use initial text context]
     QuickCheck -- No --> TokenGate{Initial tokens >= max_tokens?}
@@ -497,14 +497,14 @@ graph TD
     TokenGate -- No --> IntentExtract[LLM intent + concepts extraction]
 
     IntentExtract --> Embed[Embed intent and concept queries]
-    Embed --> ParallelFetch[Parallel retrieval:\nheaders(intent), text(intent), each concept\n(each path reranked)]
-    ParallelFetch --> DeepTree[Knowledge tree traversal per bucket\nadd child_nodes + references with penalties]
-    DeepTree --> MergeBuckets[Deduplicate and build buckets\nheaders + text + per-topic]
+    Embed --> ParallelFetch["Parallel retrieval:<br/>headers(intent), text(intent), each concept<br/>(each path reranked)"]
+    ParallelFetch --> DeepTree["Knowledge tree traversal per bucket<br/>add child_nodes + references with penalties"]
+    DeepTree --> MergeBuckets["Deduplicate and build buckets<br/>headers + text + per-topic"]
     MergeBuckets --> RoundRobin[Round-robin selection under token budget]
 
-    UseInitial --> Render[render_docs_batch\n(inline snippets + language filter)]
+    UseInitial --> Render["render_docs_batch<br/>(inline snippets + language filter)"]
     RoundRobin --> Render
-    Render --> Response[MessageContextResponse:\ncontext, prompt_msg, system, intent, raw_context?]
+    Render --> Response["MessageContextResponse:<br/>context, prompt_msg, system, intent, raw_context?"]
 
     style ParallelFetch fill:#bbf,stroke:#333
     style InitTree fill:#cfe,stroke:#333
